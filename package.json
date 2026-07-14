@@ -1,0 +1,48 @@
+{
+  "name": "voice-genui-livekit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "dev:agent": "tsx agent/main.ts dev",
+    "dev:all": "concurrently -n web,agent -c blue,green \"npm run dev\" \"npm run dev:agent\"",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "@livekit/agents": "^1.5.0",
+    "@livekit/agents-plugin-deepgram": "^1.5.0",
+    "@livekit/agents-plugin-elevenlabs": "^1.5.0",
+    "@livekit/agents-plugin-silero": "^1.5.0",
+    "@livekit/components-react": "^2.9.21",
+    "@react-spring/core": "^10.1.2",
+    "@react-spring/three": "^10.1.2",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "@types/three": "^0.185.0",
+    "dotenv": "^17.4.2",
+    "isomorphic-dompurify": "^3.18.0",
+    "livekit-client": "^2.20.0",
+    "livekit-server-sdk": "^2.16.0",
+    "next": "16.2.10",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "three": "^0.185.1",
+    "tsx": "^4.23.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^10.0.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.10",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
