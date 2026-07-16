@@ -1,52 +1,97 @@
 # Voice GenUI (LiveKit)
 
-Speak a physics concept and watch the lab viewport become an interactive Three.js demo with a live voice teacher.
+Open-source **voice + generative UI** framework. Speak a concept and watch the full viewport become an interactive Three.js demo with a live voice teacher.
 
-## Stack
+Built on [LiveKit Agents](https://livekit.io/agents), [Next.js](https://nextjs.org), and [Anthropic](https://anthropic.com). Fork it, add a domain, deploy your own vertical.
 
-- **Next.js** web client + `/api/token` (Vercel)
-- **LiveKit** realtime room + voice agent worker (runs separately from Vercel)
+## What makes this different
 
-## Local setup
+- **Voice-first** — real-time STT/TTS with a conversational teacher
+- **Generative UI** — the LLM calls `render_canvas` to build full-viewport Three.js scenes from a visual brief (not pre-authored sims)
+- **Async teaching** — the agent keeps talking while demos assemble in the background
+- **Quizzes** — `render_quiz` checks understanding on screen without spoiling answers aloud
+- **Multi-domain** — one codebase, many subjects (physics, chemistry, math, biology, programming)
+
+## Quick start
 
 ```bash
 cp .env.example .env.local
-# fill in LiveKit + Anthropic + Deepgram keys, and FEEDBACK_ACCESS_CODE
+# fill in LiveKit + Anthropic + Deepgram keys
 npm install
 npm run dev:all
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and enter the access code from `FEEDBACK_ACCESS_CODE`.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Deploy on Vercel
+## Choose a domain (subject)
 
-1. Import this GitHub repo in [Vercel](https://vercel.com/new).
-2. Framework preset: **Next.js** (auto-detected).
-3. Add these **Environment Variables** (Production + Preview):
-
-| Variable | Required | Notes |
-|----------|----------|--------|
-| `NEXT_PUBLIC_LIVEKIT_URL` | yes | `wss://…livekit.cloud` |
-| `LIVEKIT_API_KEY` | yes | Server-only |
-| `LIVEKIT_API_SECRET` | yes | Server-only |
-| `FEEDBACK_ACCESS_CODE` | yes | Shared invite code for reviewers |
-| `ALLOWED_ORIGINS` | recommended | e.g. `https://your-app.vercel.app` |
-
-4. Deploy. Share the Vercel URL **and** the access code (never share API keys).
-
-### Voice agent (required for full demos)
-
-Vercel hosts the UI and token minting only. Run the LiveKit agent elsewhere (your machine, a VM, or [LiveKit Cloud Agents](https://docs.livekit.io/agents/ops/deployment/)):
+Set in `.env.local`:
 
 ```bash
-# same secrets as .env.example, plus Anthropic / Deepgram / optional ElevenLabs
+DOMAIN=physics              # agent prompts
+NEXT_PUBLIC_DOMAIN=physics  # UI labels & suggestions
+```
+
+| Domain | Lab | Example prompt |
+|--------|-----|----------------|
+| `physics` | Physics Lab | "Explain projectile motion with an interactive demo" |
+| `chemistry` | Chemistry Lab | "Show the structure and polarity of a water molecule" |
+| `mathematics` | Math Studio | "Explain the derivative as a tangent slope" |
+| `biology` | Biology Lab | "Walk through DNA replication with an animation" |
+| `programming` | Code Lab | "Visualize binary search on a sorted array" |
+
+See [lib/domain/README.md](lib/domain/README.md) for adding custom domains.
+
+## Stack
+
+| Layer | Tech |
+|-------|------|
+| Web client | Next.js, React Three Fiber, LiveKit React |
+| Token API | `/api/token` on Vercel |
+| Voice agent | LiveKit Agents worker (runs separately) |
+| LLM | Anthropic Claude |
+| STT / TTS | Deepgram (ElevenLabs optional) |
+| GenUI | Async Three.js scene generation via tool calls |
+
+## Deploy
+
+### Web (Vercel)
+
+1. Import this repo in [Vercel](https://vercel.com/new).
+2. Add environment variables from `.env.example`.
+3. Set `DOMAIN` and `NEXT_PUBLIC_DOMAIN` to your vertical.
+4. Deploy.
+
+### Voice agent (required)
+
+Vercel hosts the UI only. Run the agent on your machine, a VM, or [LiveKit Cloud Agents](https://docs.livekit.io/agents/ops/deployment/):
+
+```bash
 npm run dev:agent
 ```
 
-Without a running agent, users can join rooms but will not get voice/canvas responses.
+Use the **same** `DOMAIN` env var on the agent as on the web app.
 
-## Security notes
+### Publish multiple verticals
 
-- API keys stay server-side / agent-side (not in the browser bundle).
-- Production refuses to mint LiveKit tokens unless `FEEDBACK_ACCESS_CODE` is set.
-- Token minting is rate-limited per IP.
+Deploy the same repo multiple times with different `DOMAIN` / `NEXT_PUBLIC_DOMAIN` values — one deployment per subject. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Project structure
+
+```
+agent/           LiveKit voice agent + render tools
+  tools/         render_canvas, render_quiz
+  llm.ts         Anthropic LLM adapter
+  canvasRenderWorker.ts  Async Three.js generation
+lib/domain/      Domain presets (physics, chemistry, …)
+components/world/  Lab viewport, captions, quiz overlay
+app/             Next.js pages + token API
+```
+
+## Contributing
+
+We welcome new domains and improvements. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE)

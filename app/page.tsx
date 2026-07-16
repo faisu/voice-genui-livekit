@@ -1,6 +1,7 @@
 "use client";
 
 import { AgentAudioOutput } from "@/components/AgentAudioOutput";
+import { DomainProvider, useDomain } from "@/components/DomainProvider";
 import { WorldCanvas } from "@/components/WorldCanvas";
 import {
   useConnectionStatus,
@@ -254,6 +255,15 @@ function VoiceGenUIApp() {
 const ACCESS_CODE_STORAGE_KEY = "voice-genui-access-code";
 
 export default function HomePage() {
+  return (
+    <DomainProvider>
+      <HomePageContent />
+    </DomainProvider>
+  );
+}
+
+function HomePageContent() {
+  const domain = useDomain();
   const [session, setSession] = useState<TokenResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accessCode, setAccessCode] = useState("");
@@ -363,7 +373,7 @@ export default function HomePage() {
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#050508]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-sky-400" />
         <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-          Opening physics lab
+          {domain.openingLabel}
         </p>
       </div>
     );
@@ -378,7 +388,7 @@ export default function HomePage() {
         >
           <div className="space-y-2 text-center">
             <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
-              Physics Lab
+              {domain.labName}
             </p>
             <h1 className="text-xl font-semibold text-zinc-100">
               {gateRequired ? "Enter access code" : "Unable to connect"}

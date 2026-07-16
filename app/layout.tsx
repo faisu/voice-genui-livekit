@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { resolveDomain } from "@/lib/domain";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,10 +13,11 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const domain = resolveDomain();
+
 export const metadata: Metadata = {
-  title: "Physics Lab — Voice Teacher",
-  description:
-    "Speak any physics concept and watch the full lab viewport become an interactive Three.js demo with a live voice teacher.",
+  title: `${domain.labName} — Voice Teacher`,
+  description: domain.description,
 };
 
 export default function RootLayout({

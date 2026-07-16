@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type FormEvent } from "react";
+import { useDomain } from "@/components/DomainProvider";
 import type { ChatMessage, ConnectionStatus } from "@/lib/types";
 
 type ChatOverlayProps = {
@@ -8,6 +9,7 @@ type ChatOverlayProps = {
   connectionStatus: ConnectionStatus;
   micEnabled: boolean;
   agentState: string;
+  agentPresent: boolean;
   artifactFocused: boolean;
   minimized: boolean;
   onMinimize: () => void;
@@ -21,14 +23,32 @@ const AGENT_LABELS: Record<string, string> = {
   listening: "Listening",
   thinking: "Thinking",
   speaking: "Speaking",
-  initializing: "Connecting",
+  initializing: "Starting teacher…",
+  connecting: "Waiting for teacher…",
+  disconnected: "Disconnected",
+  failed: "Teacher unavailable",
 };
+
+function statusLabel(
+  agentState: string,
+  agentPresent: boolean,
+  connectionStatus: ConnectionStatus,
+): string {
+  if (connectionStatus !== "connected") {
+    return connectionStatus === "connecting" ? "Joining lab…" : connectionStatus;
+  }
+  if (!agentPresent) {
+    return "Waiting for teacher…";
+  }
+  return AGENT_LABELS[agentState] ?? agentState;
+}
 
 export function ChatOverlay({
   messages,
   connectionStatus,
   micEnabled,
   agentState,
+  agentPresent,
   artifactFocused,
   minimized,
   onMinimize,
@@ -36,6 +56,7 @@ export function ChatOverlay({
   onSendText,
   onReturnToAgent,
 }: ChatOverlayProps) {
+  const domain = useDomain();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,7 +65,7 @@ export function ChatOverlay({
     el.scrollTop = el.scrollHeight;
   }, [messages, agentState]);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const input = form.elements.namedItem("message") as HTMLInputElement;
@@ -55,6 +76,9 @@ export function ChatOverlay({
   };
 
   const recentMessages = messages.slice(-6);
+  const label = statusLabel(agentState, agentPresent, connectionStatus);
+  const waitingForAgent =
+    connectionStatus === "connected" && !agentPresent;
 
   if (minimized) return null;
 
@@ -89,15 +113,21 @@ export function ChatOverlay({
                 ? "scale-125 bg-sky-400 shadow-[0_0_12px_#38bdf8]"
                 : agentState === "listening"
                   ? "bg-emerald-400"
-                  : "bg-zinc-500"
+                  : waitingForAgent
+                    ? "animate-pulse bg-amber-400"
+                    : "bg-zinc-500"
             }`}
           />
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
-            Physics Teacher
+            {domain.teacherTitle}
           </p>
-          <p className="text-sm text-zinc-100">
-            {AGENT_LABELS[agentState] ?? agentState}
-          </p>
+          <p className="text-sm text-zinc-100">{label}</p>
+          {waitingForAgent ? (
+            <p className="mt-1 text-xs text-amber-200/90">
+              Agent offline — run{" "}
+              <span className="font-mono">npm run dev:agent</span>
+            </p>
+          ) : null}
           {artifactFocused && (
             <button
               type="button"

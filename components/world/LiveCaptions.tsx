@@ -1,5 +1,6 @@
 "use client";
 
+import { useDomain } from "@/components/DomainProvider";
 import type { ChatMessage } from "@/lib/types";
 
 type LiveCaptionsProps = {
@@ -16,6 +17,8 @@ const STATE_HINT: Record<string, string> = {
 };
 
 export function LiveCaptions({ messages, agentState, visible }: LiveCaptionsProps) {
+  const domain = useDomain();
+
   if (!visible) return null;
 
   const latestAssistant = [...messages]
@@ -45,7 +48,7 @@ export function LiveCaptions({ messages, agentState, visible }: LiveCaptionsProp
           </p>
         ) : (
           <p className="text-sm text-zinc-400">
-            Ask any physics question — demos appear as stations in the lab.
+            {domain.captionPlaceholder}
           </p>
         )}
       </div>

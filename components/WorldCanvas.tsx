@@ -54,7 +54,8 @@ export function WorldCanvas({
   onQuizSubmit,
   onQuizDismiss,
 }: WorldCanvasProps) {
-  const { state: agentState } = useVoiceAssistant();
+  const { state: agentState, agent } = useVoiceAssistant();
+  const agentPresent = Boolean(agent);
   const { unlockAudio } = useEnsureAudioOnGesture();
   const [chatMinimized, setChatMinimized] = useState(true);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
@@ -128,6 +129,7 @@ export function WorldCanvas({
         connectionStatus={connectionStatus}
         micEnabled={micEnabled}
         agentState={agentState}
+        agentPresent={agentPresent}
         artifactFocused={Boolean(demo && !demo.streaming)}
         minimized={chatMinimized}
         onMinimize={() => setChatMinimized(true)}
@@ -155,6 +157,11 @@ export function WorldCanvas({
         <span className="rounded-full border border-white/10 bg-black/40 px-2.5 py-1 backdrop-blur-sm">
           {connectionStatus === "connected" ? "Lab connected" : connectionStatus}
         </span>
+        {connectionStatus === "connected" && !agentPresent ? (
+          <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-amber-200">
+            Waiting for teacher…
+          </span>
+        ) : null}
         {demo?.streaming && (
           <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-amber-200">
             Building demo…

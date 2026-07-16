@@ -1,6 +1,7 @@
 import { llm, ToolFlag } from "@livekit/agents";
 import type { Room } from "@livekit/rtc-node";
 import { z } from "zod";
+import { resolveDomain } from "../../lib/domain/index.js";
 import { buildStreamingPartialJson } from "../../lib/partialJson.js";
 import { runCanvasRenderJob } from "../canvasRenderWorker.js";
 import { publishToolCallDelta } from "./renderCanvas.js";
@@ -12,25 +13,22 @@ export const renderCanvasRequestSchema = z.object({
     .describe(
       "Always threejs. The demo fills the student's entire lab viewport as an interactive Three.js scene.",
     ),
-  visual_brief: z
-    .string()
-    .describe(
-      "Detailed physics lesson spec for a FULL-VIEWPORT Three.js scene: concept, objects, forces/vectors, parameters (mass, g, angle, velocity), labels, colors, camera framing, animation behavior, play/pause/reset, and what the student should observe.",
-    ),
+  visual_brief: z.string(),
   title: z.string().optional(),
 });
 
 export type RenderCanvasRequest = z.infer<typeof renderCanvasRequestSchema>;
 
 export function createRenderCanvasTool(room: Room, roomName: string) {
+  const domain = resolveDomain();
+
+  const parameters = renderCanvasRequestSchema.extend({
+    visual_brief: z.string().describe(domain.visualBriefDescription),
+  });
+
   return llm.tool({
-    description:
-      "Replace or patch the FULL lab viewport with an interactive Three.js physics demonstration. " +
-      "Pass a rich visual_brief — never raw Three.js code. " +
-      "The entire student view becomes the demo (not a floating card). " +
-      "Use mode replace for a new concept; mode patch to refine the current scene. " +
-      "Returns immediately while the simulation builds asynchronously.",
-    parameters: renderCanvasRequestSchema,
+    description: domain.renderCanvasToolDescription,
+    parameters,
     flags: ToolFlag.CANCELLABLE,
     onDuplicate: "reject",
     execute: async (input, { ctx, abortSignal }) => {
@@ -39,8 +37,7 @@ export function createRenderCanvasTool(room: Room, roomName: string) {
           status: "rendering",
           job_id: ctx.functionCall.callId,
           title: input.title ?? null,
-          message:
-            "Full-viewport physics demo queued. Keep teaching while it builds — you will receive the finished scene shortly.",
+          message: `Full-viewport ${domain.subject.toLowerCase()} demo queued. Keep teaching while it builds — you will receive the finished scene shortly.`,
         }),
       );
 
@@ -50,7 +47,7 @@ export function createRenderCanvasTool(room: Room, roomName: string) {
           {
             mode: input.mode,
             content_type: "threejs",
-            title: input.title ?? "Building physics demo…",
+            title: input.title ?? `Building ${domain.subject.toLowerCase()} demo…`,
           },
           "",
         ),
@@ -73,7 +70,7 @@ export function createRenderCanvasTool(room: Room, roomName: string) {
           return JSON.stringify({
             status: "complete",
             job_id: ctx.functionCall.callId,
-            title: result.title ?? "Physics demo",
+            title: result.title ?? domain.demoDefaultTitle,
             content_type: "threejs",
             content_length: result.content_length,
             message: `The full-viewport demo "${result.title ?? "visualization"}" is now live.`,

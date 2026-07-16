@@ -14,6 +14,7 @@ import {
   type QuizAnswer,
   type QuizState,
 } from "../lib/types.js";
+import { resolveDomain } from "../lib/domain/index.js";
 import {
   createCanvasAgent,
   createVoiceSession,
@@ -118,10 +119,7 @@ export default defineAgent<AgentProcessUserData>({
 
     session.generateReply({
       userInput: "Hello",
-      instructions:
-        "Greet the student warmly in one short sentence as their physics teacher. " +
-        "Mention they can speak any concept — or pick a suggestion — and you'll transform the whole lab view into an interactive demo. " +
-        "Do not call tools yet.",
+      instructions: resolveDomain().greetingInstructions,
     });
   },
 });

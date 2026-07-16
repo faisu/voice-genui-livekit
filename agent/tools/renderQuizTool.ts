@@ -1,6 +1,7 @@
 import { llm } from "@livekit/agents";
 import type { Room } from "@livekit/rtc-node";
 import { z } from "zod";
+import { resolveDomain } from "../../lib/domain/index.js";
 import type { QuizQuestion, QuizSpec } from "../../lib/types.js";
 import { setQuizState } from "../session.js";
 import { publishQuizRender } from "./renderCanvas.js";
@@ -75,6 +76,12 @@ function normalizeQuiz(request: RenderQuizRequest): QuizSpec {
 }
 
 export function createRenderQuizTool(room: Room, roomName: string) {
+  const domain = resolveDomain();
+
+  const parameters = renderQuizRequestSchema.extend({
+    concept: z.string().describe(domain.quizConceptDescription),
+  });
+
   return llm.tool({
     description:
       "Display an interactive multiple-choice quiz on the student's screen to check their " +
@@ -82,7 +89,7 @@ export function createRenderQuizTool(room: Room, roomName: string) {
       "options and the index of the correct one. The quiz appears immediately; the student answers " +
       "on screen and their results are sent back to you so you can give feedback and reteach any " +
       "misconceptions. Do not read the questions or reveal answers aloud — just invite them to answer.",
-    parameters: renderQuizRequestSchema,
+    parameters,
     onDuplicate: "reject",
     execute: async (input) => {
       const quiz = normalizeQuiz(input);

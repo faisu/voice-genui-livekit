@@ -2,6 +2,7 @@
 
 import { useAudioPlayback } from "@livekit/components-react";
 import { useState } from "react";
+import { useDomain } from "@/components/DomainProvider";
 
 type AudioUnlockProps = {
   className?: string;
@@ -11,6 +12,7 @@ type AudioUnlockProps = {
  * Browsers block remote TTS until a user gesture unlocks audio.
  */
 export function AudioUnlock({ className }: AudioUnlockProps) {
+  const domain = useDomain();
   const { canPlayAudio, startAudio } = useAudioPlayback();
   const [unlocking, setUnlocking] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -41,7 +43,7 @@ export function AudioUnlock({ className }: AudioUnlockProps) {
           Enable sound
         </p>
         <h2 className="mt-2 text-lg font-medium text-zinc-50">
-          Tap to hear your physics teacher
+          {domain.audioUnlockTitle}
         </h2>
         <p className="mt-2 text-sm text-zinc-400">
           Your browser blocks voice until you interact. This only needs to happen once.

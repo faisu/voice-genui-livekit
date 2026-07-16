@@ -10,7 +10,7 @@ export type RenderCanvasInput = {
   title?: string;
 };
 
-/** Active full-viewport physics demo driven by the agent. */
+/** Active full-viewport demo driven by the agent. */
 export type WorldDemo = {
   title?: string;
   content: string;

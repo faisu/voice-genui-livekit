@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { useDomain } from "@/components/DomainProvider";
 import { prepareCanvasContent } from "@/lib/sanitize";
 import type { WorldDemo } from "@/lib/types";
 
@@ -12,11 +13,12 @@ type AgentWorldCanvasProps = {
 };
 
 declare global {
-  // eslint-disable-next-line no-var
+  var __canvasDispose: (() => void) | undefined;
   var __physicsDispose: (() => void) | undefined;
 }
 
 export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps) {
+  const domain = useDomain();
   const containerRef = useRef<HTMLDivElement>(null);
   const onEventRef = useRef(onCanvasEvent);
   const demoRef = useRef(demo);
@@ -45,13 +47,16 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
     };
 
     const dispose = () => {
-      if (typeof globalThis.__physicsDispose === "function") {
+      const cleanup =
+        globalThis.__canvasDispose ?? globalThis.__physicsDispose;
+      if (typeof cleanup === "function") {
         try {
-          globalThis.__physicsDispose();
+          cleanup();
         } catch (error) {
-          console.error("Physics dispose error", error);
+          console.error("Canvas dispose error", error);
         }
       }
+      globalThis.__canvasDispose = undefined;
       globalThis.__physicsDispose = undefined;
       container.replaceChildren();
     };
@@ -96,7 +101,7 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
               Building simulation
             </p>
             <p className="mt-2 max-w-xs text-sm text-zinc-300">
-              {demo.title ?? "Physics demo"} is assembling across the full lab view.
+              {demo.title ?? domain.demoDefaultTitle} {domain.demoBuildingLabel}
             </p>
           </div>
         </div>
@@ -185,7 +190,7 @@ function renderIdleScene(container: HTMLDivElement) {
   };
   window.addEventListener("resize", onResize);
 
-  globalThis.__physicsDispose = () => {
+  globalThis.__canvasDispose = () => {
     cancelAnimationFrame(frame);
     window.removeEventListener("resize", onResize);
     controls.dispose();
