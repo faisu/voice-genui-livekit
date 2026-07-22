@@ -2,7 +2,7 @@
 
 Open-source **voice + generative UI** framework. Speak a concept and watch the full viewport become an interactive Three.js demo with a live voice teacher.
 
-Built on [LiveKit Agents](https://livekit.io/agents), [Next.js](https://nextjs.org), and the [Vercel AI SDK](https://ai-sdk.dev) (Anthropic, OpenAI, or Google). Fork it, add a domain, deploy your own vertical.
+Built on [LiveKit Agents](https://livekit.io/agents) with [LiveKit Inference](https://livekit.com/products/inference) for STT/LLM/TTS, [Next.js](https://nextjs.org), and the [Vercel AI SDK](https://ai-sdk.dev) for async Three.js scene generation. Fork it, add a domain, deploy your own vertical.
 
 ## What makes this different
 
@@ -16,16 +16,30 @@ Built on [LiveKit Agents](https://livekit.io/agents), [Next.js](https://nextjs.o
 
 ```bash
 cp .env.example .env.local
-# fill in LiveKit, LLM provider, and Deepgram keys
+# fill in LiveKit credentials + an LLM provider key for canvas rendering
 npm install
 npm run dev:all
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## LLM provider
+## Voice models (LiveKit Inference)
 
-Switch models by changing env vars — no code changes required:
+The voice agent uses [LiveKit Inference](https://livekit.com/products/inference) — STT, LLM, and TTS run through your LiveKit Cloud credentials (no Deepgram / Cartesia / ElevenLabs keys required for the voice pipeline).
+
+Defaults match LiveKit’s recommended stack:
+
+| Role | Default model |
+|------|----------------|
+| STT | `deepgram/flux-general` |
+| LLM | `google/gemma-4-31b-it` |
+| TTS | `cartesia/sonic-3` |
+
+Optional overrides: `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
+
+## Canvas LLM provider
+
+Async Three.js scene generation still uses the Vercel AI SDK. Switch providers via env vars:
 
 ```bash
 LLM_PROVIDER=anthropic   # or openai | google
@@ -67,8 +81,8 @@ See [lib/domain/README.md](lib/domain/README.md) for adding custom domains.
 | Web client | Next.js, React Three Fiber, LiveKit React |
 | Token API | `/api/token` on Vercel |
 | Voice agent | LiveKit Agents worker (runs separately) |
-| LLM | Vercel AI SDK (provider-agnostic) |
-| STT / TTS | Deepgram (ElevenLabs optional) |
+| Voice STT / LLM / TTS | LiveKit Inference |
+| Canvas LLM | Vercel AI SDK (Anthropic / OpenAI / Google) |
 | GenUI | Async Three.js scene generation via tool calls |
 
 ## Deploy
@@ -99,8 +113,9 @@ Deploy the same repo multiple times with different `DOMAIN` / `NEXT_PUBLIC_DOMAI
 ```
 agent/           LiveKit voice agent + render tools
   tools/         render_canvas, render_quiz
-  llm.ts         AI SDK LLM adapter (Anthropic / OpenAI / Google)
-  canvasRenderWorker.ts  Async Three.js generation
+  llm.ts         LiveKit Inference LLM for the voice agent
+  canvasRenderWorker.ts  Async Three.js generation (AI SDK)
+lib/ai/          AI SDK helpers for canvas rendering
 lib/domain/      Domain presets (physics, chemistry, …)
 components/world/  Lab viewport, captions, quiz overlay
 app/             Next.js pages + token API

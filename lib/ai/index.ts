@@ -1,6 +1,6 @@
 export {
   convertChatContextToModelMessages,
-} from "./messages";
+} from "./messages.js";
 export {
   getLanguageModel,
   listSupportedProviders,
@@ -8,5 +8,5 @@ export {
   resolveLlmProvider,
   type LlmModelKind,
   type LlmProvider,
-} from "./model";
-export { buildAiToolSet } from "./tools";
+} from "./model.js";
+export { buildAiToolSet } from "./tools.js";
