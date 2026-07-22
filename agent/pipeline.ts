@@ -3,7 +3,7 @@ import type { Room } from "@livekit/rtc-node";
 import * as deepgram from "@livekit/agents-plugin-deepgram";
 import type { JobProcess } from "@livekit/agents";
 import * as silero from "@livekit/agents-plugin-silero";
-import { createAnthropicLLM } from "./llm.js";
+import { createAgentLLM } from "./llm.js";
 import { createRenderCanvasTool, createRenderQuizTool } from "./tools/index.js";
 import { createAgentTTS } from "./tts.js";
 import { resolveDomain } from "../lib/domain/index.js";
@@ -35,11 +35,11 @@ export function createVoiceSession() {
 
 export function createCanvasAgent(room: Room, roomName: string) {
   const domain = resolveDomain();
-  const anthropic = createAnthropicLLM(roomName, room);
+  const agentLlm = createAgentLLM(roomName, room);
 
   return new voice.Agent({
     instructions: domain.agentInstructions,
-    llm: anthropic,
+    llm: agentLlm,
     toolHandling: {
       asyncOptions: {
         replyAtTailTemplate: domain.renderCompleteTemplate,

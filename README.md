@@ -2,7 +2,7 @@
 
 Open-source **voice + generative UI** framework. Speak a concept and watch the full viewport become an interactive Three.js demo with a live voice teacher.
 
-Built on [LiveKit Agents](https://livekit.io/agents), [Next.js](https://nextjs.org), and [Anthropic](https://anthropic.com). Fork it, add a domain, deploy your own vertical.
+Built on [LiveKit Agents](https://livekit.io/agents), [Next.js](https://nextjs.org), and the [Vercel AI SDK](https://ai-sdk.dev) (Anthropic, OpenAI, or Google). Fork it, add a domain, deploy your own vertical.
 
 ## What makes this different
 
@@ -16,12 +16,30 @@ Built on [LiveKit Agents](https://livekit.io/agents), [Next.js](https://nextjs.o
 
 ```bash
 cp .env.example .env.local
-# fill in LiveKit + Anthropic + Deepgram keys
+# fill in LiveKit, LLM provider, and Deepgram keys
 npm install
 npm run dev:all
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+## LLM provider
+
+Switch models by changing env vars — no code changes required:
+
+```bash
+LLM_PROVIDER=anthropic   # or openai | google
+LLM_MODEL=claude-sonnet-4-5-20250929
+ANTHROPIC_API_KEY=...
+```
+
+| Provider | API key env | Example models |
+|----------|-------------|----------------|
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250929` |
+| `openai` | `OPENAI_API_KEY` | `gpt-4.1`, `gpt-4o` |
+| `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` |
+
+Optional `LLM_RENDER_MODEL` overrides the model used for async Three.js scene generation.
 
 ## Choose a domain (subject)
 
@@ -49,7 +67,7 @@ See [lib/domain/README.md](lib/domain/README.md) for adding custom domains.
 | Web client | Next.js, React Three Fiber, LiveKit React |
 | Token API | `/api/token` on Vercel |
 | Voice agent | LiveKit Agents worker (runs separately) |
-| LLM | Anthropic Claude |
+| LLM | Vercel AI SDK (provider-agnostic) |
 | STT / TTS | Deepgram (ElevenLabs optional) |
 | GenUI | Async Three.js scene generation via tool calls |
 
@@ -81,7 +99,7 @@ Deploy the same repo multiple times with different `DOMAIN` / `NEXT_PUBLIC_DOMAI
 ```
 agent/           LiveKit voice agent + render tools
   tools/         render_canvas, render_quiz
-  llm.ts         Anthropic LLM adapter
+  llm.ts         AI SDK LLM adapter (Anthropic / OpenAI / Google)
   canvasRenderWorker.ts  Async Three.js generation
 lib/domain/      Domain presets (physics, chemistry, …)
 components/world/  Lab viewport, captions, quiz overlay

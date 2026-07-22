@@ -13,7 +13,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.110.0",
+    "@ai-sdk/anthropic": "^4.0.15",
+    "@ai-sdk/google": "^4.0.17",
+    "@ai-sdk/openai": "^4.0.15",
     "@livekit/agents": "^1.5.0",
     "@livekit/agents-plugin-deepgram": "^1.5.0",
     "@livekit/agents-plugin-elevenlabs": "^1.5.0",
@@ -24,6 +26,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@types/three": "^0.185.0",
+    "ai": "^7.0.29",
     "dotenv": "^17.4.2",
     "isomorphic-dompurify": "^3.18.0",
     "livekit-client": "^2.20.0",

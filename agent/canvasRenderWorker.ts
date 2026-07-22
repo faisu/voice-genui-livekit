@@ -1,22 +1,29 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { Room } from "@livekit/rtc-node";
 import { log } from "@livekit/agents";
+import { streamText, tool } from "ai";
+import { z } from "zod";
+import { getLanguageModel } from "../lib/ai/index.js";
 import type { RenderCanvasInput } from "../lib/types.js";
 import {
   buildStreamingPartialJson,
   extractPartialContentField,
   parseEmitCanvasContent,
 } from "../lib/partialJson.js";
+import { resolveDomain } from "../lib/domain/index.js";
 import { getCanvasState } from "./session.js";
 import {
   publishToolCallComplete,
   publishToolCallDelta,
 } from "./tools/renderCanvas.js";
 import type { RenderCanvasRequest } from "./tools/renderCanvasTool.js";
-import { resolveDomain } from "../lib/domain/index.js";
 
 const DELTA_THROTTLE_MS = 180;
 const DELTA_MIN_CHARS = 72;
+
+const emitCanvasContentSchema = z.object({
+  content_type: z.literal("threejs"),
+  content: z.string(),
+});
 
 function logger() {
   return log();
@@ -54,13 +61,13 @@ export async function runCanvasRenderJob(options: {
   abortSignal?: AbortSignal;
 }): Promise<CanvasRenderJobResult> {
   const { room, roomName, request, abortSignal } = options;
-  const client = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
+  const domain = resolveDomain();
+
+  const emitCanvasContent = tool({
+    description: `Emit the finished full-viewport Three.js ${domain.subject.toLowerCase()} scene.`,
+    inputSchema: emitCanvasContentSchema,
+    execute: async (input) => input,
   });
-  const model =
-    process.env.ANTHROPIC_RENDER_MODEL ??
-    process.env.ANTHROPIC_MODEL ??
-    "claude-sonnet-4-5-20250929";
 
   let toolArguments = "";
   let lastPublishedContent = "";
@@ -83,40 +90,23 @@ export async function runCanvasRenderJob(options: {
     }
   };
 
-  const stream = client.messages.stream({
-    model,
-    max_tokens: 8192,
-    system: resolveDomain().renderSystemPrompt,
-    messages: [
-      {
-        role: "user",
-        content: buildUserPrompt(request, roomName),
-      },
-    ],
-    tools: [
-      {
-        name: "emit_canvas_content",
-        description: `Emit the finished full-viewport Three.js ${resolveDomain().subject.toLowerCase()} scene.`,
-        input_schema: {
-          type: "object",
-          properties: {
-            content_type: { type: "string", enum: ["threejs"] },
-            content: { type: "string" },
-          },
-          required: ["content_type", "content"],
-        },
-      },
-    ],
-    tool_choice: { type: "tool", name: "emit_canvas_content" },
+  const result = streamText({
+    model: getLanguageModel("render"),
+    system: domain.renderSystemPrompt,
+    prompt: buildUserPrompt(request, roomName),
+    tools: { emit_canvas_content: emitCanvasContent },
+    toolChoice: { type: "tool", toolName: "emit_canvas_content" },
+    abortSignal,
+    maxOutputTokens: 8192,
   });
 
-  for await (const event of stream) {
+  for await (const part of result.fullStream) {
     if (abortSignal?.aborted) {
       throw new Error("Canvas render cancelled");
     }
 
-    if (event.type === "content_block_delta" && event.delta.type === "input_json_delta") {
-      toolArguments += event.delta.partial_json;
+    if (part.type === "tool-input-delta") {
+      toolArguments += part.inputTextDelta;
       const content = extractPartialContentField(toolArguments);
       if (content) {
         pendingContent = content;
@@ -130,6 +120,10 @@ export async function runCanvasRenderJob(options: {
         );
         await flushDelta(false);
       }
+    }
+
+    if (part.type === "tool-call" && part.toolName === "emit_canvas_content") {
+      toolArguments = JSON.stringify(part.input ?? {});
     }
   }
 
