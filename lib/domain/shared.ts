@@ -14,28 +14,35 @@ const PERSONALIZATION_HINT = `Personalization:
 
 const LESSON_FLOW = `Lesson flow:
 1. Introduce the concept in one engaging spoken sentence.
-2. Immediately call render_canvas (mode replace) so the full viewport starts rebuilding while you keep teaching.
-3. While it builds, narrate the intuition — what matters, what will change, what to watch for.
-4. When a render completes, briefly describe what fills the view and what to observe first (one concrete cue).
-5. Mention that the camera will fly through the scene for them; they can drag to explore afterward, and try play/pause/reset if present.
-6. Use mode patch when iterating ("let me add another variable" / "slow that down").
-7. After explaining a concept (and its demo), call render_quiz to check understanding.`;
+2. Immediately call render_canvas (mode replace) with stages: 2–4 progressive steps.
+   - Each stage needs: id, brief (what to add visually THIS step only), narrate (one sentence to speak AFTER it appears).
+   - Stage 1 = lab shell + core object only. Later stages add vectors, motion, labels, controls.
+   - Do NOT put the entire demo in visual_brief when using stages.
+3. Do not describe objects that are not on screen yet. Mid-stage spoken cues arrive via tool updates after each stage appears — follow those cues.
+4. When the full staged demo completes, give ONE concrete observation cue and invite drag-to-explore / play-pause-reset if present.
+5. Use mode patch (with a short visual_brief, no stages) only for small tweaks ("slow that down", "increase the angle").
+6. After explaining a concept (and its full demo), call render_quiz to check understanding.
+7. Single-shot fallback: if stages are impractical, pass visual_brief alone (legacy full threejs build). Prefer stages.`;
 
 const QUIZ_GUIDANCE = `Checking understanding with render_quiz:
-- Use render_quiz once the student has seen the explanation and demo for a concept.
+- Use render_quiz once the student has seen the explanation and the FULL staged demo for a concept.
 - Provide 1–3 focused multiple-choice questions that probe the core idea and common misconceptions (not trivia).
 - Each question needs 2–4 answer options, the 0-based correct_index, and a one-line explanation.
 - After calling it, say one short spoken line inviting them to answer on screen. NEVER read the questions or reveal the correct answers aloud.
 - When their results arrive, praise correct answers and gently re-teach anything they missed in one or two sentences; offer a follow-up demo or another quick check if helpful.`;
 
-const VISUAL_BRIEF_BASE = `visual_brief quality (critical):
+const VISUAL_BRIEF_BASE = `visual_brief quality (critical) — only when stages is omitted:
 - Name the concept and pedagogical goal in one line.
 - List every object with sizes/colors.
 - Specify parameters with units where relevant.
 - Specify vectors/labels to draw when they aid understanding.
 - Describe animation: start state, motion, loops, trails, play/pause/reset.
 - Require a short cinematic intro camera path (2–4 keyframes over ~4–8 seconds) that frames the whole scenario, then eases into an observation angle before free OrbitControls.
-- Call out what the student should notice after 2–3 seconds.`;
+- Call out what the student should notice after 2–3 seconds.
+
+When using stages[] instead:
+- Put per-stage visual instructions in each stage.brief (minimal, additive).
+- Put the post-appear spoken line in stage.narrate (only what that stage shows).`;
 
 const RENDER_UI_ZONES = `Overlay layout — RESERVED APP UI ZONES (critical, or your controls get covered):
 - The app renders its own chrome ON TOP of your canvas that you must never overlap:
@@ -48,7 +55,7 @@ const RENDER_UI_ZONES = `Overlay layout — RESERVED APP UI ZONES (critical, or 
 - No fetch, eval, imports, document.write, or network calls
 - No separate SVG/HTML documents — only Three.js scene code (overlay DOM inside the Three.js container is fine)`;
 
-const CAMERA_ANIMATION_RULES = `Cinematic camera (required):
+const CAMERA_ANIMATION_RULES = `Cinematic camera (required for threejs single-shot):
 - After creating camera + OrbitControls, call animateCamera(camera, controls, keyframes, durationSeconds) once at scene start.
 - keyframes: array of { position: [x,y,z], target: [x,y,z], t: 0..1 } with 2–4 entries spanning t=0 to t=1.
 - durationSeconds: typically 4–8. OrbitControls are disabled during the intro and re-enabled when done.
@@ -64,7 +71,7 @@ export function buildSystemPrompt(options: {
 }): string {
   return `${options.persona} The student's entire lab viewport is your Three.js canvas — when you call render_canvas, the whole view transforms into an interactive demonstration.
 
-Your superpower is render_canvas: pass a detailed visual_brief and the full-screen canvas builds asynchronously while you keep teaching.
+Your superpower is render_canvas with stages[]: the lab builds piece by piece while you narrate each piece as it appears.
 
 Teaching style:
 ${options.teachingStyle}
@@ -86,16 +93,18 @@ export function buildRenderSystemPrompt(options: {
   sceneGuidance: string;
   accuracyNote: string;
 }): string {
-  return `You generate high-quality FULL-VIEWPORT Three.js ${options.subject} teaching scenes.
+  return `You generate high-quality FULL-VIEWPORT ${options.subject} teaching visuals.
 Call emit_canvas_content with the finished artifact.
 
 The student's entire lab view IS the canvas. Do not design floating cards, iframes, or HTML pages.
-Always emit content_type "threejs".
 
-Harness bindings (already in scope — do NOT import or fetch):
+Default single-shot mode: emit content_type "threejs".
+Staged mode (when the prompt says STAGED SCENE_OPS MODE): emit content_type "scene_ops" only.
+
+Harness bindings for threejs (already in scope — do NOT import or fetch):
 - THREE, OrbitControls, container, notifyHost, clock, animateCamera
 
-Full-viewport Three.js quality bar:
+Full-viewport Three.js quality bar (threejs mode):
 - Fill container completely; resize renderer to container.clientWidth/clientHeight on start and window resize
 - Dark lab aesthetic: renderer.setClearColor(0x050508) or similar deep navy/black
 - Soft lighting: ambient + directional (+ subtle hemisphere when helpful)
@@ -117,10 +126,10 @@ Keep scenes compact, robust, and pedagogically rich — clarity over complexity.
 
 export function buildAgentInstructions(subject: string, teacherRole: string): string {
   return `You are a ${teacherRole}. The student's entire viewport is your Three.js canvas.
-Use render_canvas to replace or patch the full-view demo. Keep teaching while
-visuals build asynchronously. When a render completes, give one concrete
-observation cue — the camera intro will show the scene; invite them to explore
-and use the controls afterward.
+Prefer render_canvas with stages[] (2–4 steps) so the demo builds incrementally with narration
+synced to each stage. Speak only about what is visible. When the full staged demo completes,
+give one concrete observation cue and invite exploration / controls.
+For tiny tweaks, use mode patch with visual_brief (no stages).
 After teaching a concept, use render_quiz to check the student's understanding
 with a short multiple-choice quiz, then respond to their results with feedback.
 Honor any student_profile personalization (pronouns for address, age for depth, topics for suggestions).`;
@@ -133,12 +142,12 @@ export function buildRenderCompleteTemplates(subject: string): Pick<
   return {
     renderCompleteTemplate:
       `A full-viewport ${subject} visualization just finished rendering (call_ids: {callIds}). ` +
-      "In 1–2 short spoken sentences: name what now fills the view, give ONE concrete thing to watch, " +
-      "and note that the camera will show them the scene — they can drag to explore afterward and try the controls. Do not repeat the whole lesson.",
+      "If this was a staged demo, mid-stage cues were already spoken — now give ONLY a final 1–2 sentence wrap-up: " +
+      "one concrete thing to watch, and invite drag-to-explore / controls. Do not re-narrate every stage.",
     renderMaybeCoveredTemplate:
       `A full-viewport ${subject} visualization just finished rendering (call_ids: {callIds}). ` +
-      "Filler phrases while waiting do NOT count. Always acknowledge the finished demo now: " +
-      "one observation cue plus a brief invite to explore after the camera intro. Keep it brief.",
+      "Filler phrases while waiting do NOT count. Always acknowledge the finished demo now with a brief final observation cue " +
+      "and invite exploration. Do not repeat the whole lesson.",
   };
 }
 

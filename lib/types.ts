@@ -15,23 +15,31 @@ export type LearnerProfile = {
   otherTopic?: string;
 };
 
-/** Agent-generated demos are always Three.js filling the full viewport. */
-export type CanvasContentType = "threejs";
+/** Full Three.js source, or structured scene ops for staged building. */
+export type CanvasContentType = "threejs" | "scene_ops";
+
+export type RenderCanvasStageMeta = {
+  lesson_id?: string;
+  stage_id?: string;
+  stage_index?: number;
+  total_stages?: number;
+};
 
 export type RenderCanvasInput = {
   mode: "replace" | "patch";
   content_type: CanvasContentType;
   content: string;
   title?: string;
-};
+} & RenderCanvasStageMeta;
 
 /** Active full-viewport demo driven by the agent. */
 export type WorldDemo = {
   title?: string;
   content: string;
+  content_type?: CanvasContentType;
   streaming: boolean;
   updatedAt: number;
-};
+} & RenderCanvasStageMeta;
 
 export type CanvasState = RenderCanvasInput & {
   updatedAt: number;
@@ -97,7 +105,13 @@ export type CanvasEventMessage =
   | { type: "canvas_event"; payload: unknown }
   | { type: "text_input"; text: string }
   | { type: "quiz_answer"; quizId: string; answers: QuizAnswer[] }
-  | { type: "student_profile"; profile: LearnerProfile };
+  | { type: "student_profile"; profile: LearnerProfile }
+  | {
+      type: "stage_ready";
+      lesson_id: string;
+      stage_id: string;
+      stage_index: number;
+    };
 
 export type ChatMessage = {
   id: string;

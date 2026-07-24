@@ -1,4 +1,7 @@
-import { extractPartialContentField } from "@/lib/partialJson";
+import {
+  extractPartialContentField,
+  extractPartialStageMeta,
+} from "@/lib/partialJson";
 import type { CanvasDataMessage, WorldDemo } from "@/lib/types";
 
 export type CanvasWorldState = {
@@ -37,13 +40,19 @@ function applyCanvasDelta(
   partialInput: string,
 ): CanvasWorldAccumulator {
   const content = extractPartialContentField(partialInput);
-  const title = extractPartialTitleField(partialInput);
+  const meta = extractPartialStageMeta(partialInput);
+  const title = meta.title ?? extractPartialTitleField(partialInput);
 
   if (acc.demo) {
     acc.demo = {
       ...acc.demo,
       title: title ?? acc.demo.title,
       content: content || acc.demo.content,
+      content_type: meta.content_type ?? acc.demo.content_type,
+      lesson_id: meta.lesson_id ?? acc.demo.lesson_id,
+      stage_id: meta.stage_id ?? acc.demo.stage_id,
+      stage_index: meta.stage_index ?? acc.demo.stage_index,
+      total_stages: meta.total_stages ?? acc.demo.total_stages,
       streaming: true,
       updatedAt: Date.now(),
     };
@@ -53,6 +62,11 @@ function applyCanvasDelta(
   acc.demo = {
     title,
     content: content || "",
+    content_type: meta.content_type,
+    lesson_id: meta.lesson_id,
+    stage_id: meta.stage_id,
+    stage_index: meta.stage_index,
+    total_stages: meta.total_stages,
     streaming: true,
     updatedAt: Date.now(),
   };
@@ -66,6 +80,11 @@ function applyCanvasComplete(
   acc.demo = {
     title: input.title,
     content: input.content,
+    content_type: input.content_type,
+    lesson_id: input.lesson_id,
+    stage_id: input.stage_id,
+    stage_index: input.stage_index,
+    total_stages: input.total_stages,
     streaming: false,
     updatedAt: Date.now(),
   };

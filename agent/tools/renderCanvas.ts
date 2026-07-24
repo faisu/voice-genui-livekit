@@ -2,6 +2,7 @@ import type { Room } from "@livekit/rtc-node";
 import { log } from "@livekit/agents";
 import {
   CANVAS_DATA_TOPIC,
+  type CanvasContentType,
   type CanvasDataMessage,
   type QuizSpec,
   type RenderCanvasInput,
@@ -30,10 +31,11 @@ export async function publishToolCallComplete(
   roomName: string,
   input: RenderCanvasInput,
 ): Promise<void> {
+  const contentType: CanvasContentType = input.content_type ?? "threejs";
   const prepared: RenderCanvasInput = {
     ...input,
-    content_type: "threejs",
-    content: prepareCanvasContent(input.content, "threejs"),
+    content_type: contentType,
+    content: prepareCanvasContent(input.content, contentType),
   };
   setCanvasState(roomName, { ...prepared, updatedAt: Date.now() });
   await publishCanvasMessage(room, {

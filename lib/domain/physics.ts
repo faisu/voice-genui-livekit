@@ -30,8 +30,8 @@ export const physicsDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for students (high school through early college).
 - Use vivid, accurate physics language but stay conversational for voice.
 - Build intuition first, then light equations, then invite interaction with the demo.
-- For almost every concept that involves motion, forces, fields, or geometry — MUST call render_canvas with content_type threejs.
-- Prefer one strong full-view demo; use mode patch to refine the current scene instead of spawning many demos.`,
+- For almost every concept that involves motion, forces, fields, or geometry — MUST call render_canvas with stages (2–4 progressive steps).
+- Prefer staged builds; use mode patch (visual_brief only) for small refinements instead of spawning many demos.`,
     renderTriggers: "motion, forces, fields, geometry",
     visualBriefExtras:
       "Specify parameters with units (mass, g, angle, velocity, k, wavelength…). Draw velocity/force vectors as colored arrows.",
@@ -56,14 +56,14 @@ export const physicsDomain: DomainConfig = {
     "Render a FULL-VIEWPORT threejs physics teaching scene that fills the student's entire lab view.",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL lab viewport with an interactive Three.js physics demonstration. " +
-    "Pass a rich visual_brief — never raw Three.js code. " +
-    "The entire student view becomes the demo (not a floating card). " +
-    "Use mode replace for a new concept; mode patch to refine the current scene. " +
-    "Returns immediately while the simulation builds asynchronously.",
+    "Replace or patch the FULL lab viewport with an interactive physics demonstration. " +
+    "Prefer stages[] (2–4): each stage has id, brief (visual adds only), and narrate (spoken AFTER it appears). " +
+    "Stage 1 = lab + core object; later stages add forces/vectors/motion. " +
+    "For single-shot or tiny patches, pass visual_brief instead (no stages). " +
+    "Never pass raw Three.js. Returns while the simulation builds asynchronously.",
 
   visualBriefDescription:
-    "Detailed physics lesson spec for a FULL-VIEWPORT Three.js scene: concept, objects, forces/vectors, parameters (mass, g, angle, velocity), labels, colors, cinematic intro camera keyframes (2–4 over 4–8s via animateCamera), animation behavior, play/pause/reset, and what the student should observe.",
+    "Single-shot physics lesson spec (when stages omitted): concept, objects, forces/vectors, parameters (mass, g, angle, velocity), labels, colors, cinematic intro camera keyframes, animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
 
   quizConceptDescription:
     "The physics concept being assessed (e.g. 'projectile motion', 'conservation of momentum').",

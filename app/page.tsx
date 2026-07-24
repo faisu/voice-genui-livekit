@@ -233,6 +233,17 @@ function VoiceGenUIApp({ profile }: { profile: LearnerProfile }) {
     [publishMessage],
   );
 
+  const onStageReady = useCallback(
+    (payload: {
+      lesson_id: string;
+      stage_id: string;
+      stage_index: number;
+    }) => {
+      void publishMessage({ type: "stage_ready", ...payload });
+    },
+    [publishMessage],
+  );
+
   const onQuizSubmit = useCallback(
     (quizId: string, answers: QuizAnswer[]) => {
       void publishMessage({ type: "quiz_answer", quizId, answers });
@@ -260,6 +271,7 @@ function VoiceGenUIApp({ profile }: { profile: LearnerProfile }) {
         onToggleMic={() => setMicEnabled((value) => !value)}
         onSendText={onSendText}
         onCanvasEvent={onCanvasEvent}
+        onStageReady={onStageReady}
         onQuizSubmit={onQuizSubmit}
         onQuizDismiss={onQuizDismiss}
       />

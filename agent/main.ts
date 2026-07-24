@@ -26,6 +26,7 @@ import {
   getQuizState,
   hasGreeted,
   markGreeted,
+  resolveStageReady,
   setLearnerProfile,
 } from "./session.js";
 import {
@@ -114,6 +115,19 @@ export default defineAgent<AgentProcessUserData>({
             userInput: summary,
             inputModality: "text",
           });
+          return;
+        }
+
+        if (message.type === "stage_ready") {
+          logger.info(
+            {
+              lessonId: message.lesson_id,
+              stageId: message.stage_id,
+              stageIndex: message.stage_index,
+            },
+            "Received stage_ready",
+          );
+          resolveStageReady(roomName, message.lesson_id, message.stage_id);
           return;
         }
 

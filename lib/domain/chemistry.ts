@@ -30,8 +30,8 @@ export const chemistryDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for students (high school through early college).
 - Use accurate chemical language but stay conversational for voice.
 - Build intuition with particle-level visuals before formal notation.
-- For concepts involving structure, bonding, reactions, or energy — MUST call render_canvas with content_type threejs.
-- Prefer one strong full-view demo; use mode patch to refine the current scene.`,
+- For concepts involving structure, bonding, reactions, or energy — MUST call render_canvas with stages (2–4 progressive steps).
+- Prefer staged builds; use mode patch (visual_brief only) to refine the current scene.`,
     renderTriggers: "molecules, bonds, reactions, energy",
     visualBriefExtras:
       "Specify atom colors (CPK-style), bond types, electron movement, energy diagrams, and reaction progress when relevant.",
@@ -56,12 +56,13 @@ export const chemistryDomain: DomainConfig = {
     "Render a FULL-VIEWPORT threejs chemistry teaching scene that fills the student's entire lab view.",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL lab viewport with an interactive Three.js chemistry demonstration. " +
-    "Pass a rich visual_brief — never raw Three.js code. " +
-    "Use mode replace for a new concept; mode patch to refine the current scene.",
+    "Replace or patch the FULL lab viewport with an interactive chemistry demonstration. " +
+    "Prefer stages[] (2–4): id, brief (visual adds), narrate (spoken AFTER appear). " +
+    "Stage 1 = lab + core structure; later stages add bonds/energy/labels. " +
+    "For single-shot or tiny patches, pass visual_brief instead. Never pass raw Three.js.",
 
   visualBriefDescription:
-    "Detailed chemistry lesson spec: concept, molecular/reaction setup, atom colors, bond types, energy changes, labels, camera framing, animation (bond breaking, electron flow), play/pause/reset, and what the student should observe.",
+    "Single-shot chemistry lesson spec (when stages omitted): concept, molecular/reaction setup, atom colors, bonds, energy, labels, camera, animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
 
   quizConceptDescription:
     "The chemistry concept being assessed (e.g. 'covalent bonding', 'Le Chatelier's principle').",

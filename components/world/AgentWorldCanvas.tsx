@@ -4,13 +4,22 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useDomain } from "@/components/DomainProvider";
+import { SceneBuilder } from "@/components/world/SceneBuilder";
 import { createAnimateCamera } from "@/lib/animateCamera";
+import { parseSceneOpsDocument } from "@/lib/sceneOps";
 import { prepareCanvasContent } from "@/lib/sanitize";
 import type { WorldDemo } from "@/lib/types";
+
+type StageReadyPayload = {
+  lesson_id: string;
+  stage_id: string;
+  stage_index: number;
+};
 
 type AgentWorldCanvasProps = {
   demo: WorldDemo | null;
   onCanvasEvent: (payload: unknown) => void;
+  onStageReady?: (payload: StageReadyPayload) => void;
 };
 
 declare global {
@@ -18,15 +27,26 @@ declare global {
   var __physicsDispose: (() => void) | undefined;
 }
 
-export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps) {
+export function AgentWorldCanvas({
+  demo,
+  onCanvasEvent,
+  onStageReady,
+}: AgentWorldCanvasProps) {
   const domain = useDomain();
   const containerRef = useRef<HTMLDivElement>(null);
   const onEventRef = useRef(onCanvasEvent);
+  const onStageReadyRef = useRef(onStageReady);
   const demoRef = useRef(demo);
+  const builderRef = useRef<SceneBuilder | null>(null);
+  const activeLessonRef = useRef<string | null>(null);
 
   useEffect(() => {
     onEventRef.current = onCanvasEvent;
   }, [onCanvasEvent]);
+
+  useEffect(() => {
+    onStageReadyRef.current = onStageReady;
+  }, [onStageReady]);
 
   useEffect(() => {
     demoRef.current = demo;
@@ -34,8 +54,8 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
 
   const contentKey = demo
     ? demo.streaming
-      ? `stream:${demo.title ?? ""}`
-      : `ready:${demo.title ?? ""}:${demo.content}`
+      ? `stream:${demo.lesson_id ?? ""}:${demo.stage_id ?? demo.title ?? ""}`
+      : `ready:${demo.lesson_id ?? ""}:${demo.stage_id ?? ""}:${demo.content_type ?? "threejs"}:${demo.content}`
     : "idle";
 
   useEffect(() => {
@@ -47,7 +67,7 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
       onEventRef.current(payload);
     };
 
-    const dispose = () => {
+    const disposeThreejsScene = () => {
       if (typeof globalThis.__cameraAnimCancel === "function") {
         try {
           globalThis.__cameraAnimCancel();
@@ -67,19 +87,68 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
       }
       globalThis.__canvasDispose = undefined;
       globalThis.__physicsDispose = undefined;
-      container.replaceChildren();
     };
 
-    dispose();
+    const disposeBuilder = () => {
+      if (builderRef.current) {
+        builderRef.current.dispose();
+        builderRef.current = null;
+      }
+      activeLessonRef.current = null;
+    };
 
     if (!current || current.streaming || !current.content.trim()) {
       if (!current?.streaming) {
+        disposeBuilder();
+        disposeThreejsScene();
+        container.replaceChildren();
         renderIdleScene(container);
       }
-      return dispose;
+      return;
     }
 
+    const emitStageReady = () => {
+      if (
+        current.lesson_id &&
+        current.stage_id &&
+        typeof current.stage_index === "number"
+      ) {
+        onStageReadyRef.current?.({
+          lesson_id: current.lesson_id,
+          stage_id: current.stage_id,
+          stage_index: current.stage_index,
+        });
+      }
+    };
+
     try {
+      if (current.content_type === "scene_ops") {
+        const doc = parseSceneOpsDocument(
+          prepareCanvasContent(current.content, "scene_ops"),
+        );
+        const lessonId = current.lesson_id ?? "anonymous";
+        const sameLesson = activeLessonRef.current === lessonId;
+
+        if (!sameLesson || !builderRef.current || builderRef.current.isDisposed) {
+          disposeThreejsScene();
+          disposeBuilder();
+          container.replaceChildren();
+          builderRef.current = new SceneBuilder({ container, notifyHost });
+          activeLessonRef.current = lessonId;
+        }
+
+        builderRef.current.apply(doc);
+        emitStageReady();
+        return () => {
+          // Keep builder alive across stages of the same lesson.
+        };
+      }
+
+      // Full Three.js path — tear down any staged builder.
+      disposeBuilder();
+      disposeThreejsScene();
+      container.replaceChildren();
+
       const content = prepareCanvasContent(current.content, "threejs");
       const clock = new THREE.Clock();
       const animateCamera = createAnimateCamera(THREE);
@@ -93,13 +162,52 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
         `"use strict";\n${content}`,
       );
       runScene(THREE, OrbitControls, container, notifyHost, clock, animateCamera);
+      emitStageReady();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      disposeBuilder();
       container.innerHTML = `<div class="flex h-full items-center justify-center p-8 text-center text-sm text-red-400">${escapeHtml(message)}</div>`;
     }
 
-    return dispose;
+    return () => {
+      // On contentKey change for threejs, next effect run disposes first.
+      if (demoRef.current?.content_type !== "scene_ops") {
+        disposeThreejsScene();
+      }
+    };
   }, [contentKey]);
+
+  // Full unmount cleanup.
+  useEffect(() => {
+    return () => {
+      if (builderRef.current) {
+        builderRef.current.dispose();
+        builderRef.current = null;
+      }
+      if (typeof globalThis.__cameraAnimCancel === "function") {
+        try {
+          globalThis.__cameraAnimCancel();
+        } catch {
+          // ignore
+        }
+      }
+      const cleanup =
+        globalThis.__canvasDispose ?? globalThis.__physicsDispose;
+      if (typeof cleanup === "function") {
+        try {
+          cleanup();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
+  const stageLabel =
+    typeof demo?.stage_index === "number" &&
+    typeof demo?.total_stages === "number"
+      ? `Stage ${demo.stage_index + 1}/${demo.total_stages}`
+      : null;
 
   return (
     <div className="absolute inset-0 bg-[#050508]">
@@ -109,7 +217,7 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
           <div className="rounded-2xl border border-white/10 bg-black/55 px-6 py-5 text-center backdrop-blur-xl">
             <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-zinc-700 border-t-sky-400" />
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300">
-              Building simulation
+              {stageLabel ?? "Building simulation"}
             </p>
             <p className="mt-2 max-w-xs text-sm text-zinc-300">
               {demo.title ?? domain.demoDefaultTitle} {domain.demoBuildingLabel}

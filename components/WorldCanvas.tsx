@@ -39,6 +39,11 @@ type WorldCanvasProps = {
   onToggleMic: () => void;
   onSendText: (text: string) => void;
   onCanvasEvent: (payload: unknown) => void;
+  onStageReady?: (payload: {
+    lesson_id: string;
+    stage_id: string;
+    stage_index: number;
+  }) => void;
   onQuizSubmit: (quizId: string, answers: QuizAnswer[]) => void;
   onQuizDismiss: () => void;
 };
@@ -53,6 +58,7 @@ export function WorldCanvas({
   onToggleMic,
   onSendText,
   onCanvasEvent,
+  onStageReady,
   onQuizSubmit,
   onQuizDismiss,
 }: WorldCanvasProps) {
@@ -104,7 +110,11 @@ export function WorldCanvas({
       className="relative h-full w-full overflow-hidden bg-[#050508]"
       onPointerDown={unlockAudio}
     >
-      <AgentWorldCanvas demo={demo} onCanvasEvent={onCanvasEvent} />
+      <AgentWorldCanvas
+        demo={demo}
+        onCanvasEvent={onCanvasEvent}
+        onStageReady={onStageReady}
+      />
 
       <AudioUnlock />
 

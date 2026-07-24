@@ -30,8 +30,8 @@ export const programmingDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for learners (beginner through intermediate).
 - Connect code abstractions to visual models (memory, pointers, trees, flows).
 - Use precise but accessible language; avoid jargon without explanation.
-- For concepts involving algorithms, data structures, or system behavior — MUST call render_canvas with content_type threejs.
-- Prefer one strong full-view demo; use mode patch to step through states or change inputs.`,
+- For concepts involving algorithms, data structures, or system behavior — MUST call render_canvas with stages (2–4 progressive steps).
+- Prefer staged builds; use mode patch (visual_brief only) to step through states or change inputs.`,
     renderTriggers: "algorithms, data structures, memory, networks",
     visualBriefExtras:
       "Specify data elements as 3D nodes/blocks, highlight active steps, show pointers/arrows, and include step counters or complexity readouts.",
@@ -56,12 +56,13 @@ export const programmingDomain: DomainConfig = {
     "Render a FULL-VIEWPORT threejs programming teaching scene that fills the student's entire view.",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL viewport with an interactive Three.js programming visualization. " +
-    "Pass a rich visual_brief — never raw Three.js code. " +
-    "Use mode replace for a new concept; mode patch to refine the current scene.",
+    "Replace or patch the FULL viewport with an interactive programming visualization. " +
+    "Prefer stages[] (2–4): id, brief (visual adds), narrate (spoken AFTER appear). " +
+    "Stage 1 = data layout; later stages highlight algorithm steps. " +
+    "For single-shot or tiny patches, pass visual_brief instead. Never pass raw Three.js.",
 
   visualBriefDescription:
-    "Detailed programming lesson spec: concept, data structure layout, algorithm steps, highlights, labels, colors, camera framing, step-by-step animation, play/pause/reset, and what the learner should observe.",
+    "Single-shot programming lesson spec (when stages omitted): concept, data structure layout, algorithm steps, highlights, labels, colors, camera, step animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
 
   quizConceptDescription:
     "The programming concept being assessed (e.g. 'binary search', 'recursion base case').",

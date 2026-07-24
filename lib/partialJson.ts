@@ -1,3 +1,5 @@
+import type { CanvasContentType } from "./types";
+
 /** Extract partial `content` string from streaming tool-call JSON. */
 export function extractPartialContentField(partialJson: string): string {
   const marker = '"content"';
@@ -39,8 +41,12 @@ export function extractPartialContentField(partialJson: string): string {
 export function buildStreamingPartialJson(
   request: {
     mode: "replace" | "patch";
-    content_type: "threejs";
+    content_type: CanvasContentType;
     title?: string;
+    lesson_id?: string;
+    stage_id?: string;
+    stage_index?: number;
+    total_stages?: number;
   },
   contentFragment: string,
 ): string {
@@ -50,6 +56,14 @@ export function buildStreamingPartialJson(
     content: contentFragment,
   };
   if (request.title) payload.title = request.title;
+  if (request.lesson_id) payload.lesson_id = request.lesson_id;
+  if (request.stage_id) payload.stage_id = request.stage_id;
+  if (typeof request.stage_index === "number") {
+    payload.stage_index = request.stage_index;
+  }
+  if (typeof request.total_stages === "number") {
+    payload.total_stages = request.total_stages;
+  }
   return JSON.stringify(payload);
 }
 
@@ -62,13 +76,48 @@ function safeParseJson(raw: string): Record<string, unknown> {
 }
 
 export function parseEmitCanvasContent(raw: string): {
-  content_type: "threejs";
+  content_type: CanvasContentType;
   content: string;
 } | null {
   const parsed = safeParseJson(raw);
   const content = parsed.content;
   if (typeof content !== "string" || !content) return null;
 
-  // Accept legacy content_type values but always treat as threejs.
+  const contentType = parsed.content_type;
+  if (contentType === "scene_ops") {
+    return { content_type: "scene_ops", content };
+  }
+
+  // Accept legacy / threejs content_type values.
   return { content_type: "threejs", content };
+}
+
+/** Best-effort extract of stage metadata from streaming partial JSON. */
+export function extractPartialStageMeta(partialJson: string): {
+  title?: string;
+  lesson_id?: string;
+  stage_id?: string;
+  stage_index?: number;
+  total_stages?: number;
+  content_type?: CanvasContentType;
+} {
+  const parsed = safeParseJson(partialJson);
+  const meta: {
+    title?: string;
+    lesson_id?: string;
+    stage_id?: string;
+    stage_index?: number;
+    total_stages?: number;
+    content_type?: CanvasContentType;
+  } = {};
+
+  if (typeof parsed.title === "string") meta.title = parsed.title;
+  if (typeof parsed.lesson_id === "string") meta.lesson_id = parsed.lesson_id;
+  if (typeof parsed.stage_id === "string") meta.stage_id = parsed.stage_id;
+  if (typeof parsed.stage_index === "number") meta.stage_index = parsed.stage_index;
+  if (typeof parsed.total_stages === "number") meta.total_stages = parsed.total_stages;
+  if (parsed.content_type === "scene_ops" || parsed.content_type === "threejs") {
+    meta.content_type = parsed.content_type;
+  }
+  return meta;
 }

@@ -30,8 +30,8 @@ export const mathematicsDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for students (middle school through early college).
 - Connect symbols to visual intuition before heavy algebra.
 - Use precise mathematical language but stay conversational for voice.
-- For concepts involving graphs, geometry, transformations, or rates of change — MUST call render_canvas with content_type threejs.
-- Prefer one strong full-view demo; use mode patch to refine parameters (sliders, coefficients).`,
+- For concepts involving graphs, geometry, transformations, or rates of change — MUST call render_canvas with stages (2–4 progressive steps).
+- Prefer staged builds; use mode patch (visual_brief only) to refine parameters.`,
     renderTriggers: "graphs, geometry, transformations, calculus",
     visualBriefExtras:
       "Specify axes ranges, function expressions, key points, tangent lines, areas under curves, and geometric constructions.",
@@ -56,12 +56,13 @@ export const mathematicsDomain: DomainConfig = {
     "Render a FULL-VIEWPORT threejs mathematics teaching scene that fills the student's entire view.",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL viewport with an interactive Three.js math visualization. " +
-    "Pass a rich visual_brief — never raw Three.js code. " +
-    "Use mode replace for a new concept; mode patch to refine the current scene.",
+    "Replace or patch the FULL viewport with an interactive math visualization. " +
+    "Prefer stages[] (2–4): id, brief (visual adds), narrate (spoken AFTER appear). " +
+    "Stage 1 = axes/core figure; later stages add overlays, sweeps, labels. " +
+    "For single-shot or tiny patches, pass visual_brief instead. Never pass raw Three.js.",
 
   visualBriefDescription:
-    "Detailed math lesson spec: concept, functions/geometry setup, axes ranges, parameters, labels, colors, camera framing, animation (parameter sweeps), play/pause/reset, and what the student should observe.",
+    "Single-shot math lesson spec (when stages omitted): concept, functions/geometry, axes ranges, parameters, labels, colors, camera, animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
 
   quizConceptDescription:
     "The math concept being assessed (e.g. 'derivative as slope', 'Pythagorean theorem').",
