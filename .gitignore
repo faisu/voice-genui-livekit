@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# LiveKit Cloud agent binding (created by `lk agent create`)
+livekit.toml
+
 # local tooling
 .cursor/
 

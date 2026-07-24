@@ -87,22 +87,52 @@ See [lib/domain/README.md](lib/domain/README.md) for adding custom domains.
 
 ## Deploy
 
-### Web (Vercel)
+You need **both** a web deployment and a voice agent worker. Vercel only hosts the UI.
+
+### 1. Web (Vercel)
 
 1. Import this repo in [Vercel](https://vercel.com/new).
-2. Add environment variables from `.env.example`.
+2. Add environment variables from `.env.example` (LiveKit keys, domain, canvas LLM key, feedback code).
 3. Set `DOMAIN` and `NEXT_PUBLIC_DOMAIN` to your vertical.
 4. Deploy.
 
-### Voice agent (required)
+### 2. Voice agent (LiveKit Cloud)
 
-Vercel hosts the UI only. Run the agent on your machine, a VM, or [LiveKit Cloud Agents](https://docs.livekit.io/agents/ops/deployment/):
+Install the [LiveKit CLI](https://docs.livekit.io/intro/basics/cli/), then from the repo root:
 
 ```bash
-npm run dev:agent
+lk cloud auth
+
+# First deploy — creates livekit.toml and builds from ./Dockerfile
+# Run from the repo root (where package.json lives).
+lk agent create --secrets-file .env.local --region ap-south
+
+# Later updates (uses livekit.toml)
+lk agent deploy --secrets-file .env.local
+
+lk agent status
+lk agent logs
 ```
 
-Use the **same** `DOMAIN` env var on the agent as on the web app.
+If you see `no agent project detected`, confirm you’re in the repo root (`ls package.json Dockerfile`) and retry.
+
+**Secrets the agent needs** (LiveKit injects `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` itself):
+
+| Secret | Purpose |
+|--------|---------|
+| `DOMAIN` | Must match the Vercel `DOMAIN` |
+| `ANTHROPIC_API_KEY` (or OpenAI / Google) | Canvas Three.js generation via AI SDK |
+
+Optional: `LLM_PROVIDER`, `LLM_MODEL`, `LLM_RENDER_MODEL`, `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
+
+The worker registers as `voice-genui-agent` — the same name the web token API dispatches.
+
+### Local agent (dev / VM)
+
+```bash
+npm run dev:agent          # development
+npm run start:agent        # production mode on a VM
+```
 
 ### Publish multiple verticals
 
@@ -115,6 +145,7 @@ agent/           LiveKit voice agent + render tools
   tools/         render_canvas, render_quiz
   llm.ts         LiveKit Inference LLM for the voice agent
   canvasRenderWorker.ts  Async Three.js generation (AI SDK)
+Dockerfile       LiveKit Cloud agent image
 lib/ai/          AI SDK helpers for canvas rendering
 lib/domain/      Domain presets (physics, chemistry, …)
 components/world/  Lab viewport, captions, quiz overlay

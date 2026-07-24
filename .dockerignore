@@ -1,0 +1,54 @@
+# Dependencies & build artifacts
+node_modules
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.next
+out
+dist
+build
+coverage
+*.tsbuildinfo
+
+# Env / secrets (injected via LiveKit Cloud secrets)
+.env
+.env.*
+!.env.example
+
+# Git / editors / OS
+.git
+.gitignore
+.gitattributes
+.github
+.idea
+.vscode
+.DS_Store
+.cursor
+
+# Docs & misc (not needed at runtime)
+README.md
+CONTRIBUTING.md
+LICENSE
+CLAUDE.md
+AGENTS.md
+
+# Next.js web-only assets (agent does not serve the UI)
+public
+app
+components
+postcss.config.mjs
+next.config.ts
+eslint.config.mjs
+tsconfig.json
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+__tests__/
+tests/
+evals/
+
+# Docker / local LiveKit project binding
+Dockerfile*
+.dockerignore
+livekit.toml

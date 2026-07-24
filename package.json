@@ -8,6 +8,7 @@
     "dev": "next dev",
     "dev:agent": "tsx agent/main.ts dev",
     "dev:all": "concurrently -n web,agent -c blue,green \"npm run dev\" \"npm run dev:agent\"",
+    "start:agent": "tsx agent/main.ts start",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
