@@ -49,7 +49,7 @@ export const physicsDomain: DomainConfig = {
     accuracyNote:
       "Physics must be visually correct (gravity down −Y, consistent units, realistic relative motion)",
     sceneGuidance:
-      "Draw velocity/force vectors as colored arrows with clear meaning. Prefer MeshStandardMaterial for main bodies. Readable contrast colors (cyan/amber accents on dark backgrounds).",
+      "Draw velocity/force vectors as colored arrows with clear meaning. Prefer MeshStandardMaterial for main bodies. Readable contrast colors (cyan/amber accents on dark backgrounds). Always include an animateCamera cinematic intro that frames the apparatus before free orbit.",
   }),
 
   renderUserPromptPrefix:
@@ -63,7 +63,7 @@ export const physicsDomain: DomainConfig = {
     "Returns immediately while the simulation builds asynchronously.",
 
   visualBriefDescription:
-    "Detailed physics lesson spec for a FULL-VIEWPORT Three.js scene: concept, objects, forces/vectors, parameters (mass, g, angle, velocity), labels, colors, camera framing, animation behavior, play/pause/reset, and what the student should observe.",
+    "Detailed physics lesson spec for a FULL-VIEWPORT Three.js scene: concept, objects, forces/vectors, parameters (mass, g, angle, velocity), labels, colors, cinematic intro camera keyframes (2–4 over 4–8s via animateCamera), animation behavior, play/pause/reset, and what the student should observe.",
 
   quizConceptDescription:
     "The physics concept being assessed (e.g. 'projectile motion', 'conservation of momentum').",

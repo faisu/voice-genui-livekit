@@ -8,12 +8,12 @@ import type { CanvasWorldState } from "@/lib/canvasObjects";
 import type {
   ChatMessage,
   ConnectionStatus,
+  LearnerProfile,
   QuizAnswer,
   QuizSpec,
 } from "@/lib/types";
 import { ChatOverlay } from "./world/ChatOverlay";
 import { ConceptSuggestions } from "./world/ConceptSuggestions";
-import { LiveCaptions } from "./world/LiveCaptions";
 import { QuizOverlay } from "./world/QuizOverlay";
 import { ScreenAgentOrb } from "./world/ScreenAgentOrb";
 
@@ -35,6 +35,7 @@ type WorldCanvasProps = {
   quiz: QuizSpec | null;
   connectionStatus: ConnectionStatus;
   micEnabled: boolean;
+  learnerProfile: LearnerProfile;
   onToggleMic: () => void;
   onSendText: (text: string) => void;
   onCanvasEvent: (payload: unknown) => void;
@@ -48,6 +49,7 @@ export function WorldCanvas({
   quiz,
   connectionStatus,
   micEnabled,
+  learnerProfile,
   onToggleMic,
   onSendText,
   onCanvasEvent,
@@ -109,6 +111,7 @@ export function WorldCanvas({
       <ConceptSuggestions
         visible={showSuggestions && chatMinimized}
         disabled={connectionStatus !== "connected"}
+        preferredTopics={learnerProfile.topics}
         onSelect={handleSuggestion}
       />
 
@@ -116,12 +119,6 @@ export function WorldCanvas({
         agentState={agentState}
         chatMinimized={chatMinimized}
         onClick={handleMaximizeChat}
-      />
-
-      <LiveCaptions
-        messages={messages}
-        agentState={agentState}
-        visible={chatMinimized && !showSuggestions}
       />
 
       <ChatOverlay
@@ -147,32 +144,21 @@ export function WorldCanvas({
         />
       )}
 
-      {chatMinimized && !showSuggestions && messages.length === 0 && (
-        <div className="pointer-events-none absolute bottom-[10.5rem] left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 text-xs text-zinc-400 backdrop-blur-sm">
-          Click the orb for chat · Speak anytime · Drag to look around
+      {/* Minimal status — no captions / transcript text over the scene */}
+      {connectionStatus !== "connected" || !agentPresent ? (
+        <div className="pointer-events-none absolute right-4 top-4 z-10 flex flex-col items-end gap-1 text-xs text-zinc-400">
+          {connectionStatus !== "connected" ? (
+            <span className="rounded-full border border-white/10 bg-black/40 px-2.5 py-1 backdrop-blur-sm">
+              {connectionStatus}
+            </span>
+          ) : null}
+          {connectionStatus === "connected" && !agentPresent ? (
+            <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-amber-200">
+              Waiting for teacher…
+            </span>
+          ) : null}
         </div>
-      )}
-
-      <div className="pointer-events-none absolute right-4 top-4 z-10 flex flex-col items-end gap-1 text-xs text-zinc-400">
-        <span className="rounded-full border border-white/10 bg-black/40 px-2.5 py-1 backdrop-blur-sm">
-          {connectionStatus === "connected" ? "Lab connected" : connectionStatus}
-        </span>
-        {connectionStatus === "connected" && !agentPresent ? (
-          <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-amber-200">
-            Waiting for teacher…
-          </span>
-        ) : null}
-        {demo?.streaming && (
-          <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-amber-200">
-            Building demo…
-          </span>
-        )}
-        {demo && !demo.streaming && (
-          <span className="rounded-full border border-white/10 bg-black/40 px-2.5 py-1 backdrop-blur-sm">
-            Full-view demo live
-          </span>
-        )}
-      </div>
+      ) : null}
     </div>
   );
 }

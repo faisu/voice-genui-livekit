@@ -7,11 +7,15 @@ import {
 } from "@livekit/agents";
 import type { Room } from "@livekit/rtc-node";
 import { createAgentLLM } from "./llm.js";
-import { getCanvasState } from "./session.js";
+import {
+  getCanvasState,
+  getLearnerProfile,
+} from "./session.js";
 import { createRenderCanvasTool, createRenderQuizTool } from "./tools/index.js";
 import { createAgentTTS } from "./tts.js";
 import { TextStreamPublisher } from "./textStreamPublisher.js";
 import { resolveDomain } from "../lib/domain/index.js";
+import { formatLearnerProfileForAgent } from "../lib/learnerProfile.js";
 
 export type AgentProcessUserData = Record<string, never>;
 
@@ -77,16 +81,22 @@ class CanvasAgent extends voice.Agent {
     await this.syncCanvasInstructions();
   }
 
+  /** Re-apply base + profile + canvas context (e.g. after student_profile arrives). */
+  async refreshInstructions(): Promise<void> {
+    await this.syncCanvasInstructions();
+  }
+
   private async syncCanvasInstructions(): Promise<void> {
-    const canvasState = getCanvasState(this.roomName);
-    if (!canvasState) {
-      await this.updateInstructions(this.baseInstructions);
-      return;
+    const parts = [this.baseInstructions];
+
+    const profile = getLearnerProfile(this.roomName);
+    if (profile) {
+      parts.push(formatLearnerProfileForAgent(profile));
     }
 
-    await this.updateInstructions(
-      [
-        this.baseInstructions,
+    const canvasState = getCanvasState(this.roomName);
+    if (canvasState) {
+      parts.push(
         `current_viewport_demo:\n${JSON.stringify(
           {
             title: canvasState.title,
@@ -97,8 +107,10 @@ class CanvasAgent extends voice.Agent {
           null,
           2,
         )}`,
-      ].join("\n\n"),
-    );
+      );
+    }
+
+    await this.updateInstructions(parts.join("\n\n"));
   }
 
   async transcriptionNode(

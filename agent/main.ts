@@ -21,7 +21,13 @@ import {
   prewarmAgent,
   type AgentProcessUserData,
 } from "./pipeline.js";
-import { clearRoomSession, getQuizState } from "./session.js";
+import {
+  clearRoomSession,
+  getQuizState,
+  hasGreeted,
+  markGreeted,
+  setLearnerProfile,
+} from "./session.js";
 import {
   publishAssistantText,
   publishUserTranscript,
@@ -29,6 +35,9 @@ import {
 
 dotenv.config({ path: ".env.local" });
 dotenv.config();
+
+/** Wait briefly for student_profile before greeting so personalization applies. */
+const PROFILE_GREETING_WAIT_MS = 4000;
 
 export default defineAgent<AgentProcessUserData>({
   prewarm: prewarmAgent,
@@ -53,6 +62,15 @@ export default defineAgent<AgentProcessUserData>({
       if (text) void publishAssistantText(room, text);
     });
 
+    const issueGreeting = () => {
+      if (hasGreeted(roomName)) return;
+      markGreeted(roomName);
+      session.generateReply({
+        userInput: "Hello",
+        instructions: resolveDomain().greetingInstructions,
+      });
+    };
+
     room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
       if (topic !== CANVAS_DATA_TOPIC) return;
 
@@ -60,6 +78,17 @@ export default defineAgent<AgentProcessUserData>({
         const message = JSON.parse(
           new TextDecoder().decode(payload),
         ) as CanvasEventMessage;
+
+        if (message.type === "student_profile") {
+          logger.info({ profile: message.profile }, "Received student profile");
+          setLearnerProfile(roomName, message.profile);
+          void agent.refreshInstructions().then(() => {
+            if (!hasGreeted(roomName)) {
+              issueGreeting();
+            }
+          });
+          return;
+        }
 
         if (message.type === "text_input") {
           logger.info({ text: message.text }, "Received text input");
@@ -117,10 +146,13 @@ export default defineAgent<AgentProcessUserData>({
 
     await ctx.connect();
 
-    session.generateReply({
-      userInput: "Hello",
-      instructions: resolveDomain().greetingInstructions,
-    });
+    // Prefer greeting after profile arrives; fall back if it never does.
+    setTimeout(() => {
+      if (!hasGreeted(roomName)) {
+        logger.info("Greeting without student profile (timeout)");
+        issueGreeting();
+      }
+    }, PROFILE_GREETING_WAIT_MS);
   },
 });
 

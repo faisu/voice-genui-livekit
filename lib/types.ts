@@ -1,5 +1,20 @@
 export const CANVAS_DATA_TOPIC = "canvas";
 
+/** Age bands used for teaching depth / vocabulary personalization. */
+export type AgeBand = "under_13" | "13_15" | "16_18" | "18_22" | "23_plus";
+
+/** Pronouns for address only — never used to change lesson content metaphors. */
+export type PronounChoice = "he_him" | "she_her" | "they_them" | "prefer_not";
+
+/** Collected after access code, before joining the LiveKit room. */
+export type LearnerProfile = {
+  ageBand: AgeBand;
+  pronouns: PronounChoice;
+  /** Selected concept suggestion labels (and optional free-text "other"). */
+  topics: string[];
+  otherTopic?: string;
+};
+
 /** Agent-generated demos are always Three.js filling the full viewport. */
 export type CanvasContentType = "threejs";
 
@@ -81,7 +96,8 @@ export type CanvasDataMessage =
 export type CanvasEventMessage =
   | { type: "canvas_event"; payload: unknown }
   | { type: "text_input"; text: string }
-  | { type: "quiz_answer"; quizId: string; answers: QuizAnswer[] };
+  | { type: "quiz_answer"; quizId: string; answers: QuizAnswer[] }
+  | { type: "student_profile"; profile: LearnerProfile };
 
 export type ChatMessage = {
   id: string;

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useDomain } from "@/components/DomainProvider";
+import { createAnimateCamera } from "@/lib/animateCamera";
 import { prepareCanvasContent } from "@/lib/sanitize";
 import type { WorldDemo } from "@/lib/types";
 
@@ -47,6 +48,14 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
     };
 
     const dispose = () => {
+      if (typeof globalThis.__cameraAnimCancel === "function") {
+        try {
+          globalThis.__cameraAnimCancel();
+        } catch {
+          // ignore
+        }
+        globalThis.__cameraAnimCancel = undefined;
+      }
       const cleanup =
         globalThis.__canvasDispose ?? globalThis.__physicsDispose;
       if (typeof cleanup === "function") {
@@ -73,15 +82,17 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
     try {
       const content = prepareCanvasContent(current.content, "threejs");
       const clock = new THREE.Clock();
+      const animateCamera = createAnimateCamera(THREE);
       const runScene = new Function(
         "THREE",
         "OrbitControls",
         "container",
         "notifyHost",
         "clock",
+        "animateCamera",
         `"use strict";\n${content}`,
       );
-      runScene(THREE, OrbitControls, container, notifyHost, clock);
+      runScene(THREE, OrbitControls, container, notifyHost, clock, animateCamera);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       container.innerHTML = `<div class="flex h-full items-center justify-center p-8 text-center text-sm text-red-400">${escapeHtml(message)}</div>`;
@@ -104,11 +115,6 @@ export function AgentWorldCanvas({ demo, onCanvasEvent }: AgentWorldCanvasProps)
               {demo.title ?? domain.demoDefaultTitle} {domain.demoBuildingLabel}
             </p>
           </div>
-        </div>
-      )}
-      {demo && !demo.streaming && demo.title && (
-        <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-full border border-white/10 bg-black/45 px-3 py-1.5 text-xs text-zinc-200 backdrop-blur-sm">
-          {demo.title}
         </div>
       )}
     </div>

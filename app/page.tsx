@@ -2,6 +2,7 @@
 
 import { AgentAudioOutput } from "@/components/AgentAudioOutput";
 import { DomainProvider, useDomain } from "@/components/DomainProvider";
+import { LearnerProfileForm } from "@/components/LearnerProfileForm";
 import { WorldCanvas } from "@/components/WorldCanvas";
 import {
   useConnectionStatus,
@@ -13,10 +14,15 @@ import {
   type CanvasWorldState,
 } from "@/lib/canvasObjects";
 import {
+  loadLearnerProfile,
+  saveLearnerProfile,
+} from "@/lib/learnerProfile";
+import {
   CANVAS_DATA_TOPIC,
   type CanvasDataMessage,
   type CanvasEventMessage,
   type ChatMessage,
+  type LearnerProfile,
   type QuizAnswer,
   type QuizSpec,
 } from "@/lib/types";
@@ -40,7 +46,7 @@ type TokenResponse = {
   roomName: string;
 };
 
-function VoiceGenUIApp() {
+function VoiceGenUIApp({ profile }: { profile: LearnerProfile }) {
   const connectionStatus = useConnectionStatus();
   const { localParticipant } = useLocalParticipant();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -50,6 +56,7 @@ function VoiceGenUIApp() {
   const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [micEnabled, setMicEnabled] = useState(true);
   const worldAccRef = useRef(createCanvasWorldAccumulator());
+  const profileSentRef = useRef(false);
 
   const upsertAssistantDelta = useCallback(
     (streamId: string, delta: string, isFinal: boolean) => {
@@ -195,6 +202,14 @@ function VoiceGenUIApp() {
     [sendCanvasMessage],
   );
 
+  // Publish learner profile once the room is connected so the agent can
+  // personalize instructions before (or right as) it greets.
+  useEffect(() => {
+    if (connectionStatus !== "connected" || profileSentRef.current) return;
+    profileSentRef.current = true;
+    void publishMessage({ type: "student_profile", profile });
+  }, [connectionStatus, profile, publishMessage]);
+
   const onSendText = useCallback(
     (text: string) => {
       setChatMessages((prev) => [
@@ -241,6 +256,7 @@ function VoiceGenUIApp() {
         quiz={quiz}
         connectionStatus={connectionStatus}
         micEnabled={micEnabled}
+        learnerProfile={profile}
         onToggleMic={() => setMicEnabled((value) => !value)}
         onSendText={onSendText}
         onCanvasEvent={onCanvasEvent}
@@ -264,7 +280,9 @@ export default function HomePage() {
 
 function HomePageContent() {
   const domain = useDomain();
+  const [pendingToken, setPendingToken] = useState<TokenResponse | null>(null);
   const [session, setSession] = useState<TokenResponse | null>(null);
+  const [profile, setProfile] = useState<LearnerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accessCode, setAccessCode] = useState("");
   const [gateRequired, setGateRequired] = useState(false);
@@ -313,13 +331,25 @@ function HomePageContent() {
       }
 
       setGateRequired(false);
-      setSession({
+
+      const token: TokenResponse = {
         token: payload.token,
         url: payload.url,
         roomName: payload.roomName,
-      });
+      };
+
+      const savedProfile = loadLearnerProfile();
+      if (savedProfile) {
+        setProfile(savedProfile);
+        setPendingToken(null);
+        setSession(token);
+      } else {
+        setSession(null);
+        setPendingToken(token);
+      }
     } catch (err) {
       setSession(null);
+      setPendingToken(null);
       setError(err instanceof Error ? err.message : "Connection failed");
     } finally {
       setConnecting(false);
@@ -368,6 +398,15 @@ function HomePageContent() {
     void connect(trimmed);
   };
 
+  const onProfileSubmit = (next: LearnerProfile) => {
+    saveLearnerProfile(next);
+    setProfile(next);
+    if (pendingToken) {
+      setSession(pendingToken);
+      setPendingToken(null);
+    }
+  };
+
   if (booting || connecting) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#050508]">
@@ -379,7 +418,12 @@ function HomePageContent() {
     );
   }
 
-  if (!session) {
+  // Access succeeded — collect learner profile before joining the room.
+  if (pendingToken && !session) {
+    return <LearnerProfileForm onSubmit={onProfileSubmit} />;
+  }
+
+  if (!session || !profile) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050508] px-6">
         <form
@@ -450,6 +494,7 @@ function HomePageContent() {
       options={roomOptions}
       onDisconnected={() => {
         setSession(null);
+        setPendingToken(null);
         setError(null);
         reconnectKeyRef.current += 1;
         setBooting(true);
@@ -458,7 +503,7 @@ function HomePageContent() {
       onError={(err) => setError(err.message)}
       className="h-full"
     >
-      <VoiceGenUIApp />
+      <VoiceGenUIApp profile={profile} />
     </LiveKitRoom>
   );
 }
