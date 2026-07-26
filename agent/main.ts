@@ -51,6 +51,38 @@ export default defineAgent<AgentProcessUserData>({
 
     const session = createVoiceSession();
     const agent = createCanvasAgent(room, roomName);
+    let shuttingDown = false;
+
+    const shutdownGracefully = async (reason: string) => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      logger.info({ roomName, reason }, "Shutting down agent job");
+      try {
+        session.interrupt();
+      } catch {
+        // ignore
+      }
+      try {
+        await session.close();
+      } catch (error) {
+        logger.warn({ error }, "session.close failed during shutdown");
+      }
+      clearRoomSession(roomName);
+      try {
+        ctx.shutdown(reason);
+      } catch (error) {
+        logger.warn({ error }, "ctx.shutdown failed");
+      }
+    };
+
+    ctx.addShutdownCallback(async () => {
+      clearRoomSession(roomName);
+      try {
+        await session.close();
+      } catch {
+        // already closed
+      }
+    });
 
     session.on(AgentSessionEventTypes.UserInputTranscribed, (event) => {
       void publishUserTranscript(room, event.transcript, event.isFinal);
@@ -64,7 +96,7 @@ export default defineAgent<AgentProcessUserData>({
     });
 
     const issueGreeting = () => {
-      if (hasGreeted(roomName)) return;
+      if (hasGreeted(roomName) || shuttingDown) return;
       markGreeted(roomName);
       session.generateReply({
         userInput: "Hello",
@@ -74,11 +106,18 @@ export default defineAgent<AgentProcessUserData>({
 
     room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
       if (topic !== CANVAS_DATA_TOPIC) return;
+      if (shuttingDown) return;
 
       try {
         const message = JSON.parse(
           new TextDecoder().decode(payload),
         ) as CanvasEventMessage;
+
+        if (message.type === "leave_lab") {
+          logger.info({ reason: message.reason }, "Received leave_lab");
+          void shutdownGracefully(message.reason ?? "student left lab");
+          return;
+        }
 
         if (message.type === "student_profile") {
           logger.info({ profile: message.profile }, "Received student profile");
@@ -149,6 +188,14 @@ export default defineAgent<AgentProcessUserData>({
       }
     });
 
+    room.on(RoomEvent.ParticipantDisconnected, () => {
+      if (shuttingDown) return;
+      // Local participant is the agent; when no remotes remain, the student left.
+      if (room.remoteParticipants.size === 0) {
+        void shutdownGracefully("student disconnected");
+      }
+    });
+
     room.on(RoomEvent.Disconnected, () => {
       clearRoomSession(roomName);
     });
@@ -162,7 +209,7 @@ export default defineAgent<AgentProcessUserData>({
 
     // Prefer greeting after profile arrives; fall back if it never does.
     setTimeout(() => {
-      if (!hasGreeted(roomName)) {
+      if (!hasGreeted(roomName) && !shuttingDown) {
         logger.info("Greeting without student profile (timeout)");
         issueGreeting();
       }
@@ -177,6 +224,7 @@ const SILENT_CANVAS_ACTIONS = new Set([
   "resume",
   "stop",
   "toggle",
+  "slider",
 ]);
 
 function isSilentCanvasControl(payload: unknown): boolean {

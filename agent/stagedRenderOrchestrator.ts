@@ -143,6 +143,14 @@ export async function runStagedCanvasRender(options: {
       if (parsed) {
         stageDoc = parsed;
       } else if (result.content_type === "scene_ops") {
+        logger().warn(
+          {
+            stageId: stage.id,
+            preview: result.content.slice(0, 400),
+            length: result.content.length,
+          },
+          "scene_ops failed schema coerce",
+        );
         throw new Error("Invalid scene_ops from render worker");
       }
     } catch (error) {

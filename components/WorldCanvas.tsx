@@ -36,6 +36,7 @@ type WorldCanvasProps = {
   connectionStatus: ConnectionStatus;
   micEnabled: boolean;
   learnerProfile: LearnerProfile;
+  exiting?: boolean;
   onToggleMic: () => void;
   onSendText: (text: string) => void;
   onCanvasEvent: (payload: unknown) => void;
@@ -46,6 +47,7 @@ type WorldCanvasProps = {
   }) => void;
   onQuizSubmit: (quizId: string, answers: QuizAnswer[]) => void;
   onQuizDismiss: () => void;
+  onExitLab?: () => void;
 };
 
 export function WorldCanvas({
@@ -55,12 +57,14 @@ export function WorldCanvas({
   connectionStatus,
   micEnabled,
   learnerProfile,
+  exiting = false,
   onToggleMic,
   onSendText,
   onCanvasEvent,
   onStageReady,
   onQuizSubmit,
   onQuizDismiss,
+  onExitLab,
 }: WorldCanvasProps) {
   const { state: agentState, agent } = useVoiceAssistant();
   const agentPresent = Boolean(agent);
@@ -117,6 +121,17 @@ export function WorldCanvas({
       />
 
       <AudioUnlock />
+
+      {onExitLab ? (
+        <button
+          type="button"
+          onClick={onExitLab}
+          disabled={exiting || connectionStatus === "disconnected"}
+          className="pointer-events-auto absolute left-4 top-4 z-30 rounded-lg border border-white/10 bg-black/55 px-3 py-1.5 text-xs font-medium text-zinc-200 backdrop-blur-xl transition hover:border-white/20 hover:bg-black/70 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {exiting ? "Leaving…" : "Exit lab"}
+        </button>
+      ) : null}
 
       <ConceptSuggestions
         visible={showSuggestions && chatMinimized}

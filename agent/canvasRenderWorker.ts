@@ -2,7 +2,7 @@ import type { Room } from "@livekit/rtc-node";
 import { log } from "@livekit/agents";
 import { streamText, tool } from "ai";
 import { z } from "zod";
-import { getLanguageModel } from "../lib/ai/index.js";
+import { getLanguageModel, resolveLlmProvider } from "../lib/ai/index.js";
 import type { RenderCanvasInput } from "../lib/types.js";
 import {
   buildStreamingPartialJson,
@@ -112,8 +112,16 @@ export async function runCanvasRenderJob(options: {
   };
 
   const systemPrompt = preferSceneOps
-    ? `${domain.renderSystemPrompt}\n\nSTAGED SCENE_OPS MODE (override threejs default):\n${SCENE_OPS_PROMPT}\nAlways set content_type to "scene_ops". The content field must be a JSON string (escaped) of {"version":1,"ops":[...]}.`
-    : domain.renderSystemPrompt;
+    ? `${domain.renderSystemPrompt}\n\nSTAGED SCENE_OPS MODE (override threejs default):\n${SCENE_OPS_PROMPT}\nAlways set content_type to "scene_ops". The content field must be a JSON string (escaped) of {"version":1,"ops":[...]}.\nYou MUST call the emit_canvas_content tool — do not answer with plain text.`
+    : `${domain.renderSystemPrompt}\nYou MUST call the emit_canvas_content tool — do not answer with plain text.`;
+
+  // Kimi K3 always thinks and rejects tool_choice that names a specific function.
+  // Use "required" (must call a tool) instead of forcing emit_canvas_content by name.
+  const provider = resolveLlmProvider();
+  const toolChoice =
+    provider === "kimi"
+      ? ("required" as const)
+      : ({ type: "tool", toolName: "emit_canvas_content" } as const);
 
   const result = streamText({
     model: getLanguageModel("render"),
@@ -123,9 +131,17 @@ export async function runCanvasRenderJob(options: {
       roomName,
     ),
     tools: { emit_canvas_content: emitCanvasContent },
-    toolChoice: { type: "tool", toolName: "emit_canvas_content" },
+    toolChoice,
     abortSignal,
     maxOutputTokens,
+    ...(provider === "kimi"
+      ? {
+          // Faster/cheaper canvas jobs; K3 thinking cannot be disabled.
+          providerOptions: {
+            kimi: { reasoningEffort: "low" },
+          },
+        }
+      : {}),
   });
 
   for await (const part of result.fullStream) {

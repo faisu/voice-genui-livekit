@@ -39,21 +39,22 @@ Optional overrides: `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL
 
 ## Canvas LLM provider
 
-Async Three.js scene generation still uses the Vercel AI SDK. Switch providers via env vars:
+Async Three.js / scene-ops generation uses the Vercel AI SDK. Default is **Claude Sonnet 5** (Anthropic).
 
 ```bash
-LLM_PROVIDER=anthropic   # or openai | google
-LLM_MODEL=claude-sonnet-4-5-20250929
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-5
 ANTHROPIC_API_KEY=...
 ```
 
 | Provider | API key env | Example models |
 |----------|-------------|----------------|
-| `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250929` |
+| `anthropic` (default) | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
+| `kimi` | `MOONSHOT_API_KEY` (or `KIMI_API_KEY`) | `kimi-k3` |
 | `openai` | `OPENAI_API_KEY` | `gpt-4.1`, `gpt-4o` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` |
 
-Optional `LLM_RENDER_MODEL` overrides the model used for async Three.js scene generation.
+Optional `LLM_RENDER_MODEL` overrides the model used for async canvas generation. Optional `KIMI_BASE_URL` overrides the Moonshot endpoint (default `https://api.moonshot.ai/v1`).
 
 ## Choose a domain (subject)
 
@@ -121,9 +122,9 @@ If you see `no agent project detected`, confirm you’re in the repo root (`ls p
 | Secret | Purpose |
 |--------|---------|
 | `DOMAIN` | Must match the Vercel `DOMAIN` |
-| `ANTHROPIC_API_KEY` (or OpenAI / Google) | Canvas Three.js generation via AI SDK |
+| `MOONSHOT_API_KEY` (or Anthropic / OpenAI / Google) | Canvas generation via AI SDK |
 
-Optional: `LLM_PROVIDER`, `LLM_MODEL`, `LLM_RENDER_MODEL`, `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
+Optional: `LLM_PROVIDER`, `LLM_MODEL`, `LLM_RENDER_MODEL`, `KIMI_BASE_URL`, `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
 
 The worker registers as `voice-genui-agent` — the same name the web token API dispatches.
 

@@ -81,10 +81,32 @@ export function parseEmitCanvasContent(raw: string): {
 } | null {
   const parsed = safeParseJson(raw);
   const content = parsed.content;
-  if (typeof content !== "string" || !content) return null;
+  if (content == null || content === "") return null;
+
+  // Models sometimes emit scene_ops as an object instead of a JSON string.
+  if (typeof content === "object") {
+    return {
+      content_type: "scene_ops",
+      content: JSON.stringify(content),
+    };
+  }
+
+  if (typeof content !== "string") return null;
 
   const contentType = parsed.content_type;
   if (contentType === "scene_ops") {
+    return { content_type: "scene_ops", content };
+  }
+
+  // Heuristic: if the string looks like scene_ops JSON, treat it as such.
+  const trimmed = content.trim();
+  if (
+    trimmed.startsWith("{") &&
+    (trimmed.includes('"ops"') || trimmed.includes('"ensureLab"'))
+  ) {
+    return { content_type: "scene_ops", content };
+  }
+  if (trimmed.startsWith("[") && trimmed.includes('"op"')) {
     return { content_type: "scene_ops", content };
   }
 

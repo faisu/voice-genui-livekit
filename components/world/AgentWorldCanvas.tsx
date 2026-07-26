@@ -6,6 +6,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { useDomain } from "@/components/DomainProvider";
 import { SceneBuilder } from "@/components/world/SceneBuilder";
 import { createAnimateCamera } from "@/lib/animateCamera";
+import { createSceneControls } from "@/lib/createSceneControls";
 import { parseSceneOpsDocument } from "@/lib/sceneOps";
 import { prepareCanvasContent } from "@/lib/sanitize";
 import type { WorldDemo } from "@/lib/types";
@@ -159,9 +160,19 @@ export function AgentWorldCanvas({
         "notifyHost",
         "clock",
         "animateCamera",
+        "createSceneControls",
         `"use strict";\n${content}`,
       );
-      runScene(THREE, OrbitControls, container, notifyHost, clock, animateCamera);
+      runScene(
+        THREE,
+        OrbitControls,
+        container,
+        notifyHost,
+        clock,
+        animateCamera,
+        (opts: Parameters<typeof createSceneControls>[1]) =>
+          createSceneControls(THREE, opts),
+      );
       emitStageReady();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -209,22 +220,25 @@ export function AgentWorldCanvas({
       ? `Stage ${demo.stage_index + 1}/${demo.total_stages}`
       : null;
 
+  // Keep the lab fully visible and interactive while later stages stream in.
+  const showStageChip = Boolean(demo?.streaming);
+
   return (
     <div className="absolute inset-0 bg-[#050508]">
       <div ref={containerRef} className="h-full w-full" />
-      {demo?.streaming && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[#050508]/55 backdrop-blur-[2px]">
-          <div className="rounded-2xl border border-white/10 bg-black/55 px-6 py-5 text-center backdrop-blur-xl">
-            <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-2 border-zinc-700 border-t-sky-400" />
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300">
-              {stageLabel ?? "Building simulation"}
+      {showStageChip ? (
+        <div className="pointer-events-none absolute left-1/2 top-4 z-10 -translate-x-1/2">
+          <div className="flex items-center gap-2.5 rounded-full border border-white/10 bg-black/50 px-3.5 py-2 backdrop-blur-md">
+            <div className="h-3.5 w-3.5 animate-spin rounded-full border border-zinc-600 border-t-sky-400" />
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-sky-300">
+              {stageLabel ?? "Building"}
             </p>
-            <p className="mt-2 max-w-xs text-sm text-zinc-300">
-              {demo.title ?? domain.demoDefaultTitle} {domain.demoBuildingLabel}
+            <p className="max-w-56 truncate text-xs text-zinc-400">
+              {demo?.title ?? domain.demoDefaultTitle}
             </p>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

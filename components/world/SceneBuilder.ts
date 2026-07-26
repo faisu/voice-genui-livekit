@@ -3,12 +3,20 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { createAnimateCamera } from "@/lib/animateCamera";
+import {
+  createSceneControls,
+  type SceneControlsHandle,
+} from "@/lib/createSceneControls";
 import type { SceneOp, SceneOpsDocument } from "@/lib/sceneOps";
 
 type NotifyHost = (payload: unknown) => void;
 
+type MotionKind = "static" | "projectile" | "pendulum" | "orbit" | "oscillate";
+
 type MotionState = {
-  type: "static" | "projectile" | "pendulum" | "orbit" | "oscillate";
+  type: MotionKind;
+  /** Original motion kind — restored on reset after projectiles settle. */
+  baseType: MotionKind;
   origin: THREE.Vector3;
   velocity: THREE.Vector3;
   gravity: number;
@@ -21,6 +29,8 @@ type MotionState = {
   speed: number;
   axis: THREE.Vector3;
   elapsed: number;
+  /** Projectile hit the ground; stays put until reset/play. */
+  settled: boolean;
 };
 
 type TrailState = {
@@ -58,12 +68,11 @@ export class SceneBuilder {
   private paused = false;
   private objects = new Map<string, ManagedObject>();
   private trails = new Map<string, TrailState>();
-  private overlay: HTMLDivElement | null = null;
-  private titleEl: HTMLElement | null = null;
-  private readoutEl: HTMLElement | null = null;
+  private sceneControls: SceneControlsHandle | null = null;
   private disposed = false;
   private labReady = false;
   private animateCamera = createAnimateCamera(THREE);
+  private paramBindings = new Map<string, (value: number) => void>();
 
   constructor(options: SceneBuilderOptions) {
     this.container = options.container;
@@ -96,7 +105,8 @@ export class SceneBuilder {
     }
     this.controls?.dispose();
     this.renderer?.dispose();
-    this.overlay?.remove();
+    this.sceneControls?.dispose();
+    this.sceneControls = null;
     this.objects.clear();
     this.trails.clear();
     this.container.replaceChildren();
@@ -373,6 +383,7 @@ export class SceneBuilder {
 
     managed.motion = {
       type: op.type,
+      baseType: op.type,
       origin,
       velocity: new THREE.Vector3(...(op.velocity ?? [0, 0, 0])),
       gravity: op.gravity ?? 9.8,
@@ -385,6 +396,7 @@ export class SceneBuilder {
       speed: op.speed ?? 1,
       axis: new THREE.Vector3(...(op.axis ?? [1, 0, 0])).normalize(),
       elapsed: 0,
+      settled: false,
     };
 
     if (op.type === "static") {
@@ -394,56 +406,34 @@ export class SceneBuilder {
 
   private setOverlay(op: Extract<SceneOp, { op: "setOverlay" }>): void {
     this.ensureLab(true, 0x050508);
-    if (!this.overlay) {
-      const overlay = document.createElement("div");
-      overlay.style.cssText =
-        "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:5;pointer-events:auto;display:flex;flex-direction:column;align-items:center;gap:8px;max-width:min(92vw,420px);";
-      this.container.style.position = "relative";
-      this.container.appendChild(overlay);
-      this.overlay = overlay;
+    if (!this.scene || !this.camera || !this.renderer || !this.controls) return;
 
-      const title = document.createElement("div");
-      title.style.cssText =
-        "font:600 13px/1.3 ui-sans-serif,system-ui,sans-serif;color:#e2e8f0;text-align:center;padding:6px 12px;border-radius:999px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.08);";
-      overlay.appendChild(title);
-      this.titleEl = title;
-
-      const readout = document.createElement("div");
-      readout.style.cssText =
-        "font:12px/1.4 ui-sans-serif,system-ui,sans-serif;color:#94a3b8;text-align:center;";
-      overlay.appendChild(readout);
-      this.readoutEl = readout;
-
-      const controls = document.createElement("div");
-      controls.style.cssText = "display:flex;gap:8px;";
-      controls.dataset.role = "controls";
-      for (const action of ["play", "pause", "reset"] as const) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = action[0]!.toUpperCase() + action.slice(1);
-        btn.style.cssText =
-          "pointer-events:auto;cursor:pointer;font:600 11px/1 ui-sans-serif,system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;color:#e2e8f0;background:rgba(15,23,42,.75);border:1px solid rgba(148,163,184,.35);border-radius:8px;padding:8px 12px;";
-        btn.addEventListener("click", () => {
-          if (action === "play") this.paused = false;
-          if (action === "pause") this.paused = true;
-          if (action === "reset") this.resetMotions();
-          this.notifyHost({ action });
-        });
-        controls.appendChild(btn);
-      }
-      overlay.appendChild(controls);
-    }
-
-    if (this.titleEl) this.titleEl.textContent = op.title;
-    if (this.readoutEl) {
-      this.readoutEl.textContent = (op.readouts ?? []).join(" · ");
-    }
-    const controlsRow = this.overlay?.querySelector(
-      '[data-role="controls"]',
-    ) as HTMLElement | null;
-    if (controlsRow) {
-      controlsRow.style.display = op.showControls === false ? "none" : "flex";
-    }
+    this.sceneControls?.dispose();
+    this.sceneControls = createSceneControls(THREE, {
+      scene: this.scene,
+      camera: this.camera,
+      renderer: this.renderer,
+      controls: this.controls,
+      position: op.position,
+      title: op.title,
+      readouts: op.readouts,
+      showButtons: op.showControls !== false,
+      slider: op.slider,
+      notifyHost: this.notifyHost,
+      onPlay: () => {
+        this.playMotions();
+      },
+      onPause: () => {
+        this.paused = true;
+      },
+      onReset: () => {
+        this.resetMotions();
+      },
+      onSlider: (id, value) => {
+        const bind = this.paramBindings.get(id);
+        bind?.(value);
+      },
+    });
   }
 
   private focusCamera(op: Extract<SceneOp, { op: "focusCamera" }>): void {
@@ -500,7 +490,7 @@ export class SceneBuilder {
   private updateMotions(dt: number): void {
     for (const managed of this.objects.values()) {
       const motion = managed.motion;
-      if (!motion || motion.type === "static") continue;
+      if (!motion || motion.type === "static" || motion.settled) continue;
       motion.elapsed += dt;
       const obj = managed.object3d;
 
@@ -515,7 +505,7 @@ export class SceneBuilder {
           const z = motion.origin.z + motion.velocity.z * t;
           if (y < 0) {
             obj.position.set(x, 0, z);
-            motion.type = "static";
+            motion.settled = true;
           } else {
             obj.position.set(x, y, z);
           }
@@ -578,15 +568,32 @@ export class SceneBuilder {
     }
   }
 
+  /** Resume playback; restart any settled projectiles so Play works after landing. */
+  private playMotions(): void {
+    let needsRestart = false;
+    for (const managed of this.objects.values()) {
+      const motion = managed.motion;
+      if (!motion) continue;
+      if (motion.settled || (motion.baseType !== "static" && motion.type === "static")) {
+        needsRestart = true;
+        break;
+      }
+    }
+    if (needsRestart) {
+      this.resetMotions();
+      return;
+    }
+    this.paused = false;
+  }
+
   private resetMotions(): void {
     for (const managed of this.objects.values()) {
       const motion = managed.motion;
       if (!motion) continue;
+      motion.type = motion.baseType;
       motion.elapsed = 0;
+      motion.settled = false;
       managed.object3d.position.copy(motion.origin);
-      if (motion.type === "static" && motion.velocity.lengthSq() > 0) {
-        // keep
-      }
     }
     for (const trail of this.trails.values()) {
       trail.positions.length = 0;

@@ -36,24 +36,23 @@ const VISUAL_BRIEF_BASE = `visual_brief quality (critical) — only when stages 
 - List every object with sizes/colors.
 - Specify parameters with units where relevant.
 - Specify vectors/labels to draw when they aid understanding.
-- Describe animation: start state, motion, loops, trails, play/pause/reset.
-- Require a short cinematic intro camera path (2–4 keyframes over ~4–8 seconds) that frames the whole scenario, then eases into an observation angle before free OrbitControls.
+- Describe animation: start state, motion, loops, trails, play/pause/reset via in-scene createSceneControls (not HTML).
+- Prefer interactive apparatus (draggable masses, adjustable angles) over UI cards.
+- Require a short cinematic intro camera path (2–4 keyframes over ~4–8 seconds) via animateCamera, then free OrbitControls.
 - Call out what the student should notice after 2–3 seconds.
 
 When using stages[] instead:
 - Put per-stage visual instructions in each stage.brief (minimal, additive).
 - Put the post-appear spoken line in stage.narrate (only what that stage shows).`;
 
-const RENDER_UI_ZONES = `Overlay layout — RESERVED APP UI ZONES (critical, or your controls get covered):
-- The app renders its own chrome ON TOP of your canvas that you must never overlap:
-  - BOTTOM of the viewport (roughly the bottom 220px, full width, centered): the microphone orb only. NEVER put interactive controls here.
-  - Top-right corner (~220px): small app status chips.
-- Put ALL of your HTML overlays in the TOP region of the container. Anchor interactive controls to TOP-CENTER.
-- Every overlay element must set a high z-index (e.g. z-index: 5) and pointer-events: auto.
-- Keep the vertical center clear for the simulation.
-- Register cleanup: globalThis.__canvasDispose = () => { cancelAnimationFrame(...); renderer.dispose(); controls.dispose(); overlay.remove(); }
+const RENDER_UI_ZONES = `Interaction UI (critical — NO HTML overlays):
+- Do NOT create HTML/DOM overlays, cards, panels, or document.createElement UI for title/readouts/controls.
+- Use the host helper createSceneControls({ scene, camera, renderer, controls, notifyHost, title, readouts, slider?, onPlay, onPause, onReset, onSlider }) to place an IN-SCENE 3D panel students click/drag directly.
+- Prefer making the apparatus itself interactive when it teaches (drag a mass, pull a spring) via raycasting; keep OrbitControls disabled while dragging.
+- Reserved app chrome you must not cover with interactive 3D widgets: bottom ~220px (mic orb) and top-right ~220px.
+- Register cleanup: globalThis.__canvasDispose = () => { cancelAnimationFrame(...); sceneControls?.dispose(); renderer.dispose(); controls.dispose(); }
 - No fetch, eval, imports, document.write, or network calls
-- No separate SVG/HTML documents — only Three.js scene code (overlay DOM inside the Three.js container is fine)`;
+- No separate SVG/HTML documents — Three.js scene only`;
 
 const CAMERA_ANIMATION_RULES = `Cinematic camera (required for threejs single-shot):
 - After creating camera + OrbitControls, call animateCamera(camera, controls, keyframes, durationSeconds) once at scene start.
@@ -102,7 +101,7 @@ Default single-shot mode: emit content_type "threejs".
 Staged mode (when the prompt says STAGED SCENE_OPS MODE): emit content_type "scene_ops" only.
 
 Harness bindings for threejs (already in scope — do NOT import or fetch):
-- THREE, OrbitControls, container, notifyHost, clock, animateCamera
+- THREE, OrbitControls, container, notifyHost, clock, animateCamera, createSceneControls
 
 Full-viewport Three.js quality bar (threejs mode):
 - Fill container completely; resize renderer to container.clientWidth/clientHeight on start and window resize
@@ -112,8 +111,9 @@ Full-viewport Three.js quality bar (threejs mode):
 - Animate with clock.getDelta() in a requestAnimationFrame loop; support a paused flag
 - ${options.accuracyNote}
 - Add subtle motion trails or path lines when they teach the concept
-- Include a compact HTML overlay INSIDE container (absolute positioned) with: concept title, 1–2 key readouts, and Play / Pause / Reset buttons
-- Buttons should toggle local simulation state AND call notifyHost({ action: "play"|"pause"|"reset" })
+- NEVER build HTML overlay panels for title/readouts/sliders/buttons
+- Call createSceneControls once after camera+controls exist for title, 1–2 readouts, Play/Pause/Reset, and optional slider; wire onPlay/onPause/onReset/onSlider to simulation state and notifyHost({ action })
+- Prefer direct manipulation of scene objects (drag masses, rotate joints) when it teaches the concept
 
 ${CAMERA_ANIMATION_RULES}
 

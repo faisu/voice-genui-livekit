@@ -111,7 +111,9 @@ export type CanvasEventMessage =
       lesson_id: string;
       stage_id: string;
       stage_index: number;
-    };
+    }
+  /** Student is leaving the lab; agent should shut down the job. */
+  | { type: "leave_lab"; reason?: string };
 
 export type ChatMessage = {
   id: string;

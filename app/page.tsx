@@ -30,6 +30,7 @@ import {
   LiveKitRoom,
   useDataChannel,
   useLocalParticipant,
+  useRoomContext,
 } from "@livekit/components-react";
 import {
   useCallback,
@@ -46,15 +47,23 @@ type TokenResponse = {
   roomName: string;
 };
 
-function VoiceGenUIApp({ profile }: { profile: LearnerProfile }) {
+function VoiceGenUIApp({
+  profile,
+  onExitLab,
+}: {
+  profile: LearnerProfile;
+  onExitLab: () => void;
+}) {
   const connectionStatus = useConnectionStatus();
   const { localParticipant } = useLocalParticipant();
+  const room = useRoomContext();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [worldState, setWorldState] = useState<CanvasWorldState>({
     demo: null,
   });
   const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [micEnabled, setMicEnabled] = useState(true);
+  const [exiting, setExiting] = useState(false);
   const worldAccRef = useRef(createCanvasWorldAccumulator());
   const profileSentRef = useRef(false);
 
@@ -255,6 +264,40 @@ function VoiceGenUIApp({ profile }: { profile: LearnerProfile }) {
     setQuiz(null);
   }, []);
 
+  const handleExitLab = useCallback(async () => {
+    if (exiting) return;
+    setExiting(true);
+    onExitLab();
+    try {
+      await publishMessage({ type: "leave_lab", reason: "exit button" });
+    } catch {
+      // Best-effort notify; disconnect still tears the room down.
+    }
+    try {
+      await room.disconnect();
+    } catch (error) {
+      console.error("Failed to disconnect from lab", error);
+      setExiting(false);
+    }
+  }, [exiting, onExitLab, publishMessage, room]);
+
+  // Tab close / navigation away — disconnect so the agent job can shut down.
+  useEffect(() => {
+    const disconnectOnLeave = () => {
+      try {
+        void room.disconnect();
+      } catch {
+        // page is unloading
+      }
+    };
+    window.addEventListener("pagehide", disconnectOnLeave);
+    window.addEventListener("beforeunload", disconnectOnLeave);
+    return () => {
+      window.removeEventListener("pagehide", disconnectOnLeave);
+      window.removeEventListener("beforeunload", disconnectOnLeave);
+    };
+  }, [room]);
+
   useEffect(() => {
     void localParticipant.setMicrophoneEnabled(micEnabled);
   }, [localParticipant, micEnabled]);
@@ -268,12 +311,16 @@ function VoiceGenUIApp({ profile }: { profile: LearnerProfile }) {
         connectionStatus={connectionStatus}
         micEnabled={micEnabled}
         learnerProfile={profile}
+        exiting={exiting}
         onToggleMic={() => setMicEnabled((value) => !value)}
         onSendText={onSendText}
         onCanvasEvent={onCanvasEvent}
         onStageReady={onStageReady}
         onQuizSubmit={onQuizSubmit}
         onQuizDismiss={onQuizDismiss}
+        onExitLab={() => {
+          void handleExitLab();
+        }}
       />
       <AgentAudioOutput />
     </div>
@@ -302,6 +349,8 @@ function HomePageContent() {
   const [connecting, setConnecting] = useState(false);
   const reconnectKeyRef = useRef(0);
   const [reconnectKey, setReconnectKey] = useState(0);
+  const intentionalLeaveRef = useRef(false);
+  const [leftLab, setLeftLab] = useState(false);
 
   const connect = useCallback(async (code: string) => {
     setConnecting(true);
@@ -435,6 +484,38 @@ function HomePageContent() {
     return <LearnerProfileForm onSubmit={onProfileSubmit} />;
   }
 
+  if (leftLab && profile) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[#050508] px-6">
+        <div className="w-full max-w-sm space-y-5 text-center">
+          <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
+            {domain.labName}
+          </p>
+          <h1 className="text-xl font-semibold text-zinc-100">
+            You left the lab
+          </h1>
+          <p className="text-sm text-zinc-400">
+            The teacher session ended. Re-enter whenever you want to continue.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setLeftLab(false);
+              intentionalLeaveRef.current = false;
+              reconnectKeyRef.current += 1;
+              setBooting(true);
+              setError(null);
+              setReconnectKey(reconnectKeyRef.current);
+            }}
+            className="w-full rounded-lg bg-sky-500 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-sky-400"
+          >
+            Re-enter lab
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!session || !profile) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050508] px-6">
@@ -505,9 +586,16 @@ function HomePageContent() {
       video={false}
       options={roomOptions}
       onDisconnected={() => {
+        const intentional = intentionalLeaveRef.current;
+        intentionalLeaveRef.current = false;
         setSession(null);
         setPendingToken(null);
         setError(null);
+        if (intentional) {
+          setLeftLab(true);
+          return;
+        }
+        // Unexpected drop — reconnect with a fresh token.
         reconnectKeyRef.current += 1;
         setBooting(true);
         setReconnectKey(reconnectKeyRef.current);
@@ -515,7 +603,12 @@ function HomePageContent() {
       onError={(err) => setError(err.message)}
       className="h-full"
     >
-      <VoiceGenUIApp profile={profile} />
+      <VoiceGenUIApp
+        profile={profile}
+        onExitLab={() => {
+          intentionalLeaveRef.current = true;
+        }}
+      />
     </LiveKitRoom>
   );
 }
