@@ -2,7 +2,7 @@ import type { Room } from "@livekit/rtc-node";
 import { log } from "@livekit/agents";
 import { streamText, tool } from "ai";
 import { z } from "zod";
-import { getLanguageModel, resolveLlmProvider } from "../lib/ai/index.js";
+import { getLanguageModel, resolveLlmModel, resolveLlmProvider, getRenderProviderOptions } from "../lib/ai/index.js";
 import type { RenderCanvasInput } from "../lib/types.js";
 import {
   buildStreamingPartialJson,
@@ -118,6 +118,13 @@ export async function runCanvasRenderJob(options: {
   // Kimi K3 always thinks and rejects tool_choice that names a specific function.
   // Use "required" (must call a tool) instead of forcing emit_canvas_content by name.
   const provider = resolveLlmProvider();
+  const modelId = resolveLlmModel("render");
+  const renderProviderOptions = getRenderProviderOptions();
+  logger().info(
+    { provider, modelId, preferSceneOps, title: request.title },
+    "Starting canvas render job",
+  );
+
   const toolChoice =
     provider === "kimi"
       ? ("required" as const)
@@ -134,13 +141,8 @@ export async function runCanvasRenderJob(options: {
     toolChoice,
     abortSignal,
     maxOutputTokens,
-    ...(provider === "kimi"
-      ? {
-          // Faster/cheaper canvas jobs; K3 thinking cannot be disabled.
-          providerOptions: {
-            kimi: { reasoningEffort: "low" },
-          },
-        }
+    ...(renderProviderOptions
+      ? { providerOptions: renderProviderOptions }
       : {}),
   });
 

@@ -90,17 +90,27 @@ export function getLanguageModel(
       })(resolvedModelId);
     case "anthropic":
       return createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })(resolvedModelId);
-    default: {
-      const kimi = createOpenAI({
-        apiKey: resolveKimiApiKey(),
-        baseURL: process.env.KIMI_BASE_URL?.trim() || KIMI_BASE_URL,
-        name: "kimi",
-      });
-      return kimi.chat(resolvedModelId);
-    }
+    default:
+      return createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY })(resolvedModelId);
   }
 }
 
+/** Provider-specific options that keep canvas jobs fast. */
+export function getRenderProviderOptions():
+  | { anthropic: { effort: "low" } }
+  | { kimi: { reasoningEffort: "low" } }
+  | undefined {
+  const provider = resolveLlmProvider();
+  if (provider === "anthropic") {
+    // Sonnet 5 adaptive thinking is on by default; low effort keeps staged builds snappy.
+    return { anthropic: { effort: "low" } };
+  }
+  if (provider === "kimi") {
+    return { kimi: { reasoningEffort: "low" } };
+  }
+  return undefined;
+}
+
 export function listSupportedProviders(): LlmProvider[] {
-  return ["kimi", "anthropic", "openai", "google"];
+  return ["anthropic", "kimi", "openai", "google"];
 }

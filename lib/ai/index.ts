@@ -3,6 +3,7 @@ export {
 } from "./messages.js";
 export {
   getLanguageModel,
+  getRenderProviderOptions,
   listSupportedProviders,
   resolveLlmModel,
   resolveLlmProvider,

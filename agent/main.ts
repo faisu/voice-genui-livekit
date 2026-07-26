@@ -1,5 +1,7 @@
 import {
+  AgentSession,
   AgentSessionEventTypes,
+  CloseReason,
   cli,
   defineAgent,
   log,
@@ -14,6 +16,7 @@ import {
   type QuizAnswer,
   type QuizState,
 } from "../lib/types.js";
+import { resolveLlmModel, resolveLlmProvider } from "../lib/ai/index.js";
 import { resolveDomain } from "../lib/domain/index.js";
 import {
   createCanvasAgent,
@@ -47,11 +50,107 @@ export default defineAgent<AgentProcessUserData>({
     const room = ctx.room;
     const roomName = ctx.job.room?.name ?? room.name ?? "default-room";
 
-    logger.info({ roomName }, "Agent joining room");
+    logger.info(
+      {
+        roomName,
+        canvasProvider: resolveLlmProvider(),
+        canvasModel: resolveLlmModel("render"),
+      },
+      "Agent joining room",
+    );
 
-    const session = createVoiceSession();
+    let session = createVoiceSession();
     const agent = createCanvasAgent(room, roomName);
     let shuttingDown = false;
+    let sessionAlive = false;
+    let restarting = false;
+
+    const wireSessionEvents = (active: AgentSession) => {
+      active.on(AgentSessionEventTypes.UserInputTranscribed, (event) => {
+        void publishUserTranscript(room, event.transcript, event.isFinal);
+      });
+
+      active.on(AgentSessionEventTypes.ConversationItemAdded, (event) => {
+        if (event.item.type !== "message") return;
+        if (event.item.role !== "assistant") return;
+        const text = event.item.textContent;
+        if (text) void publishAssistantText(room, text);
+      });
+
+      active.on(AgentSessionEventTypes.Close, (event) => {
+        sessionAlive = false;
+        if (shuttingDown) return;
+        if (
+          event.reason === CloseReason.ERROR &&
+          room.remoteParticipants.size > 0
+        ) {
+          logger.warn(
+            { reason: event.reason, error: event.error },
+            "Voice session closed unexpectedly; restarting so text/canvas still work",
+          );
+          void restartSession();
+        }
+      });
+    };
+
+    const restartSession = async () => {
+      if (shuttingDown || restarting) return;
+      restarting = true;
+      try {
+        try {
+          await session.close();
+        } catch {
+          // already closed
+        }
+        session = createVoiceSession();
+        wireSessionEvents(session);
+        await session.start({ agent, room });
+        sessionAlive = true;
+        logger.info("Voice session restarted");
+      } catch (error) {
+        logger.error({ error }, "Failed to restart voice session");
+      } finally {
+        restarting = false;
+      }
+    };
+
+    const runUserReply = async (opts: {
+      userInput: string;
+      inputModality?: "text";
+      instructions?: string;
+    }) => {
+      if (shuttingDown) return;
+      if (!sessionAlive) {
+        await restartSession();
+      }
+      if (!sessionAlive) {
+        logger.error("Cannot generate reply — session is not running");
+        return;
+      }
+      try {
+        session.interrupt();
+      } catch {
+        // session may already be idle
+      }
+      try {
+        session.generateReply(opts);
+      } catch (error) {
+        logger.error(
+          { error },
+          "generateReply failed; attempting session restart",
+        );
+        await restartSession();
+        if (!sessionAlive) return;
+        try {
+          session.generateReply(opts);
+        } catch (retryError) {
+          logger.error(
+            { error: retryError },
+            "generateReply failed after restart",
+          );
+        }
+      }
+    };
 
     const shutdownGracefully = async (reason: string) => {
       if (shuttingDown) return;
@@ -84,21 +183,12 @@ export default defineAgent<AgentProcessUserData>({
       }
     });
 
-    session.on(AgentSessionEventTypes.UserInputTranscribed, (event) => {
-      void publishUserTranscript(room, event.transcript, event.isFinal);
-    });
-
-    session.on(AgentSessionEventTypes.ConversationItemAdded, (event) => {
-      if (event.item.type !== "message") return;
-      if (event.item.role !== "assistant") return;
-      const text = event.item.textContent;
-      if (text) void publishAssistantText(room, text);
-    });
+    wireSessionEvents(session);
 
     const issueGreeting = () => {
       if (hasGreeted(roomName) || shuttingDown) return;
       markGreeted(roomName);
-      session.generateReply({
+      void runUserReply({
         userInput: "Hello",
         instructions: resolveDomain().greetingInstructions,
       });
@@ -132,8 +222,7 @@ export default defineAgent<AgentProcessUserData>({
 
         if (message.type === "text_input") {
           logger.info({ text: message.text }, "Received text input");
-          session.interrupt();
-          session.generateReply({
+          void runUserReply({
             userInput: message.text,
             inputModality: "text",
           });
@@ -147,10 +236,13 @@ export default defineAgent<AgentProcessUserData>({
           );
 
           const quiz = getQuizState(roomName);
-          const summary = buildQuizResultSummary(quiz, message.quizId, message.answers);
+          const summary = buildQuizResultSummary(
+            quiz,
+            message.quizId,
+            message.answers,
+          );
 
-          session.interrupt();
-          session.generateReply({
+          void runUserReply({
             userInput: summary,
             inputModality: "text",
           });
@@ -177,8 +269,7 @@ export default defineAgent<AgentProcessUserData>({
             return;
           }
 
-          session.interrupt();
-          session.generateReply({
+          void runUserReply({
             userInput: `[User interacted with canvas: ${JSON.stringify(message.payload)}]`,
             inputModality: "text",
           });
@@ -204,6 +295,7 @@ export default defineAgent<AgentProcessUserData>({
       agent,
       room,
     });
+    sessionAlive = true;
 
     await ctx.connect();
 
