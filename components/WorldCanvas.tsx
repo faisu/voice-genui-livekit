@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useVoiceAssistant } from "@livekit/components-react";
 import { AudioUnlock, useEnsureAudioOnGesture } from "@/components/AudioUnlock";
 import type { CanvasWorldState } from "@/lib/canvasObjects";
@@ -13,7 +13,6 @@ import type {
   QuizSpec,
 } from "@/lib/types";
 import { ChatOverlay } from "./world/ChatOverlay";
-import { ConceptSuggestions } from "./world/ConceptSuggestions";
 import { QuizOverlay } from "./world/QuizOverlay";
 import { ScreenAgentOrb } from "./world/ScreenAgentOrb";
 
@@ -35,7 +34,7 @@ type WorldCanvasProps = {
   quiz: QuizSpec | null;
   connectionStatus: ConnectionStatus;
   micEnabled: boolean;
-  learnerProfile: LearnerProfile;
+  learnerProfile: LearnerProfile | null;
   exiting?: boolean;
   onToggleMic: () => void;
   onSendText: (text: string) => void;
@@ -70,24 +69,9 @@ export function WorldCanvas({
   const agentPresent = Boolean(agent);
   const { unlockAudio } = useEnsureAudioOnGesture();
   const [chatMinimized, setChatMinimized] = useState(true);
-  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
 
   const demo = worldState.demo;
-
-  useEffect(() => {
-    if (demo || messages.some((message) => message.role === "user")) {
-      setSuggestionsDismissed(true);
-    }
-  }, [demo, messages]);
-
-  const handleSuggestion = useCallback(
-    (prompt: string) => {
-      unlockAudio();
-      setSuggestionsDismissed(true);
-      onSendText(prompt);
-    },
-    [onSendText, unlockAudio],
-  );
+  const onboarding = connectionStatus === "connected" && !learnerProfile && !demo;
 
   const handleMaximizeChat = () => {
     unlockAudio();
@@ -103,11 +87,6 @@ export function WorldCanvas({
     unlockAudio();
     onSendText(text);
   };
-
-  const showSuggestions =
-    !suggestionsDismissed &&
-    !demo &&
-    connectionStatus === "connected";
 
   return (
     <div
@@ -133,12 +112,17 @@ export function WorldCanvas({
         </button>
       ) : null}
 
-      <ConceptSuggestions
-        visible={showSuggestions && chatMinimized}
-        disabled={connectionStatus !== "connected"}
-        preferredTopics={learnerProfile.topics}
-        onSelect={handleSuggestion}
-      />
+      {onboarding ? (
+        <div className="pointer-events-none absolute left-1/2 top-[28%] z-20 w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 text-center">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-300/90">
+            Voice intro
+          </p>
+          <p className="mt-2 text-sm text-zinc-300">
+            Your teacher will ask a couple of quick questions out loud — just
+            speak your answers. No forms.
+          </p>
+        </div>
+      ) : null}
 
       <ScreenAgentOrb
         agentState={agentState}
@@ -169,7 +153,6 @@ export function WorldCanvas({
         />
       )}
 
-      {/* Minimal status — no captions / transcript text over the scene */}
       {connectionStatus !== "connected" || !agentPresent ? (
         <div className="pointer-events-none absolute right-4 top-4 z-10 flex flex-col items-end gap-1 text-xs text-zinc-400">
           {connectionStatus !== "connected" ? (

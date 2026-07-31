@@ -2,11 +2,8 @@
 
 import { AgentAudioOutput } from "@/components/AgentAudioOutput";
 import { DomainProvider, useDomain } from "@/components/DomainProvider";
-import { LearnerProfileForm } from "@/components/LearnerProfileForm";
 import { WorldCanvas } from "@/components/WorldCanvas";
-import {
-  useConnectionStatus,
-} from "@/components/VoiceControls";
+import { useConnectionStatus } from "@/components/VoiceControls";
 import {
   applyCanvasMessage,
   createCanvasWorldAccumulator,
@@ -48,9 +45,11 @@ type TokenResponse = {
 
 function VoiceGenUIApp({
   profile,
+  onProfileChange,
   onExitLab,
 }: {
-  profile: LearnerProfile;
+  profile: LearnerProfile | null;
+  onProfileChange: (profile: LearnerProfile) => void;
   onExitLab: () => void;
 }) {
   const connectionStatus = useConnectionStatus();
@@ -106,10 +105,7 @@ function VoiceGenUIApp({
       const last = prev[prev.length - 1];
       if (last?.role === "assistant") {
         if (last.text === text && last.isFinal) return prev;
-        return [
-          ...prev.slice(0, -1),
-          { ...last, text, isFinal: true },
-        ];
+        return [...prev.slice(0, -1), { ...last, text, isFinal: true }];
       }
 
       return [
@@ -124,29 +120,23 @@ function VoiceGenUIApp({
     });
   }, []);
 
-  const upsertTranscript = useCallback(
-    (text: string, isFinal: boolean) => {
-      setChatMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "user" && last.isFinal === false) {
-          return [
-            ...prev.slice(0, -1),
-            { ...last, text, isFinal },
-          ];
-        }
-        return [
-          ...prev,
-          {
-            id: `user-${Date.now()}`,
-            role: "user",
-            text,
-            isFinal,
-          },
-        ];
-      });
-    },
-    [],
-  );
+  const upsertTranscript = useCallback((text: string, isFinal: boolean) => {
+    setChatMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last?.role === "user" && last.isFinal === false) {
+        return [...prev.slice(0, -1), { ...last, text, isFinal }];
+      }
+      return [
+        ...prev,
+        {
+          id: `user-${Date.now()}`,
+          role: "user",
+          text,
+          isFinal,
+        },
+      ];
+    });
+  }, []);
 
   const applyCanvasPayload = useCallback((payload: CanvasDataMessage) => {
     worldAccRef.current = applyCanvasMessage(worldAccRef.current, payload);
@@ -189,12 +179,24 @@ function VoiceGenUIApp({
 
         if (payload.type === "quiz_render") {
           setQuiz(payload.quiz);
+          return;
+        }
+
+        if (payload.type === "learner_profile") {
+          saveLearnerProfile(payload.profile);
+          onProfileChange(payload.profile);
         }
       } catch (error) {
         console.error("Failed to parse canvas data message", error);
       }
     },
-    [applyCanvasPayload, finalizeAssistantText, upsertAssistantDelta, upsertTranscript],
+    [
+      applyCanvasPayload,
+      finalizeAssistantText,
+      onProfileChange,
+      upsertAssistantDelta,
+      upsertTranscript,
+    ],
   );
 
   const { send: sendCanvasMessage } = useDataChannel(
@@ -210,10 +212,11 @@ function VoiceGenUIApp({
     [sendCanvasMessage],
   );
 
-  // Publish learner profile once the room is connected so the agent can
-  // personalize instructions before (or right as) it greets.
+  // Returning students: publish saved profile once so the agent skips voice onboarding.
   useEffect(() => {
-    if (connectionStatus !== "connected" || profileSentRef.current) return;
+    if (connectionStatus !== "connected" || !profile || profileSentRef.current) {
+      return;
+    }
     profileSentRef.current = true;
     void publishMessage({ type: "student_profile", profile });
   }, [connectionStatus, profile, publishMessage]);
@@ -280,7 +283,6 @@ function VoiceGenUIApp({
     }
   }, [exiting, onExitLab, publishMessage, room]);
 
-  // Tab close / navigation away — disconnect so the agent job can shut down.
   useEffect(() => {
     const disconnectOnLeave = () => {
       try {
@@ -326,7 +328,6 @@ function VoiceGenUIApp({
   );
 }
 
-
 export default function HomePage() {
   return (
     <DomainProvider>
@@ -337,7 +338,6 @@ export default function HomePage() {
 
 function HomePageContent() {
   const domain = useDomain();
-  const [pendingToken, setPendingToken] = useState<TokenResponse | null>(null);
   const [session, setSession] = useState<TokenResponse | null>(null);
   const [profile, setProfile] = useState<LearnerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -373,24 +373,15 @@ function HomePageContent() {
         throw new Error("Invalid token response");
       }
 
-      const token: TokenResponse = {
+      // Returning visitors keep their voice-collected profile; first visit onboards in-lab.
+      setProfile(loadLearnerProfile());
+      setSession({
         token: payload.token,
         url: payload.url,
         roomName: payload.roomName,
-      };
-
-      const savedProfile = loadLearnerProfile();
-      if (savedProfile) {
-        setProfile(savedProfile);
-        setPendingToken(null);
-        setSession(token);
-      } else {
-        setSession(null);
-        setPendingToken(token);
-      }
+      });
     } catch (err) {
       setSession(null);
-      setPendingToken(null);
       setError(err instanceof Error ? err.message : "Connection failed");
     } finally {
       setConnecting(false);
@@ -425,15 +416,6 @@ function HomePageContent() {
     [],
   );
 
-  const onProfileSubmit = (next: LearnerProfile) => {
-    saveLearnerProfile(next);
-    setProfile(next);
-    if (pendingToken) {
-      setSession(pendingToken);
-      setPendingToken(null);
-    }
-  };
-
   if (booting || connecting) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#050508]">
@@ -445,12 +427,7 @@ function HomePageContent() {
     );
   }
 
-  // Access succeeded — collect learner profile before joining the room.
-  if (pendingToken && !session) {
-    return <LearnerProfileForm onSubmit={onProfileSubmit} />;
-  }
-
-  if (leftLab && profile) {
+  if (leftLab) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050508] px-6">
         <div className="w-full max-w-sm space-y-5 text-center">
@@ -482,7 +459,7 @@ function HomePageContent() {
     );
   }
 
-  if (!session || !profile) {
+  if (!session) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050508] px-6">
         <div className="w-full max-w-sm space-y-5">
@@ -529,13 +506,11 @@ function HomePageContent() {
         const intentional = intentionalLeaveRef.current;
         intentionalLeaveRef.current = false;
         setSession(null);
-        setPendingToken(null);
         setError(null);
         if (intentional) {
           setLeftLab(true);
           return;
         }
-        // Unexpected drop — reconnect with a fresh token.
         reconnectKeyRef.current += 1;
         setBooting(true);
         setReconnectKey(reconnectKeyRef.current);
@@ -545,6 +520,7 @@ function HomePageContent() {
     >
       <VoiceGenUIApp
         profile={profile}
+        onProfileChange={setProfile}
         onExitLab={() => {
           intentionalLeaveRef.current = true;
         }}

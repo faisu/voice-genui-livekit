@@ -11,7 +11,12 @@ import {
   getCanvasState,
   getLearnerProfile,
 } from "./session.js";
-import { createRenderCanvasTool, createRenderQuizTool } from "./tools/index.js";
+import {
+  createRenderCanvasTool,
+  createRenderQuizTool,
+  createSaveLearnerProfileTool,
+} from "./tools/index.js";
+import { createAgentSTT } from "./stt.js";
 import { createAgentTTS } from "./tts.js";
 import { TextStreamPublisher } from "./textStreamPublisher.js";
 import { resolveDomain } from "../lib/domain/index.js";
@@ -19,21 +24,13 @@ import { formatLearnerProfileForAgent } from "../lib/learnerProfile.js";
 
 export type AgentProcessUserData = Record<string, never>;
 
-/** LiveKit Inference defaults from https://livekit.com/products/inference */
-const DEFAULT_STT_MODEL = "deepgram/flux-general";
-
 export async function prewarmAgent(_proc: JobProcess<AgentProcessUserData>): Promise<void> {
   // VAD / turn detection load via LiveKit Inference; no plugin prewarm required.
 }
 
 export function createVoiceSession() {
-  const sttModel = process.env.LIVEKIT_STT_MODEL?.trim() || DEFAULT_STT_MODEL;
-
   return new voice.AgentSession({
-    stt: new inference.STT({
-      model: sttModel,
-      language: "en",
-    }),
+    stt: createAgentSTT(),
     llm: createAgentLLM(),
     tts: createAgentTTS(),
     turnHandling: {
@@ -51,9 +48,10 @@ class CanvasAgent extends voice.Agent {
 
   constructor(room: Room, roomName: string) {
     const domain = resolveDomain();
-    // Prefer the full teaching system prompt so GenUI tool use stays rich
-    // after moving the voice LLM to LiveKit Inference.
+    // Full teaching system prompt so GenUI tool use stays rich.
     const baseInstructions = domain.systemPrompt;
+
+    let refreshAfterProfileSave: () => Promise<void> = async () => {};
 
     super({
       instructions: baseInstructions,
@@ -66,12 +64,18 @@ class CanvasAgent extends voice.Agent {
       tools: {
         render_canvas: createRenderCanvasTool(room, roomName),
         render_quiz: createRenderQuizTool(room, roomName),
+        save_learner_profile: createSaveLearnerProfileTool(
+          room,
+          roomName,
+          () => refreshAfterProfileSave(),
+        ),
       },
     });
 
     this.baseInstructions = baseInstructions;
     this.roomName = roomName;
     this.textPublisher = new TextStreamPublisher(room);
+    refreshAfterProfileSave = () => this.syncCanvasInstructions();
   }
 
   async onUserTurnCompleted(

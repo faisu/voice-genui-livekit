@@ -6,11 +6,11 @@ export type AgeBand = "under_13" | "13_15" | "16_18" | "18_22" | "23_plus";
 /** Pronouns for address only — never used to change lesson content metaphors. */
 export type PronounChoice = "he_him" | "she_her" | "they_them" | "prefer_not";
 
-/** Collected after access code, before joining the LiveKit room. */
+/** Collected once by voice after joining the lab (age, pronouns, optional topics). */
 export type LearnerProfile = {
   ageBand: AgeBand;
   pronouns: PronounChoice;
-  /** Selected concept suggestion labels (and optional free-text "other"). */
+  /** Topic labels the student mentioned wanting to explore. */
   topics: string[];
   otherTopic?: string;
 };
@@ -98,7 +98,8 @@ export type CanvasDataMessage =
       isFinal: boolean;
     }
   | { type: "user_transcript"; text: string; isFinal: boolean }
-  | { type: "quiz_render"; quiz: QuizSpec };
+  | { type: "quiz_render"; quiz: QuizSpec }
+  | { type: "learner_profile"; profile: LearnerProfile };
 
 /** Browser → agent (data channel, topic "canvas") */
 export type CanvasEventMessage =

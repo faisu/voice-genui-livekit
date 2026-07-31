@@ -23,23 +23,19 @@ npm run dev:all
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Voice models (LiveKit Inference)
+## Voice models
 
-The voice agent uses [LiveKit Inference](https://livekit.com/products/inference) — STT, LLM, and TTS run through your LiveKit Cloud credentials (no Deepgram / Cartesia / ElevenLabs keys required for the voice pipeline).
+| Role | Default |
+|------|---------|
+| STT | Deepgram (`STT_PROVIDER=deepgram`) or LiveKit Inference |
+| LLM | Anthropic Claude via AI SDK (`LLM_PROVIDER` / `LLM_MODEL`) — bills your provider key, not LiveKit Inference |
+| TTS | Deepgram or LiveKit Inference (`cartesia/sonic-3`) |
 
-Defaults match LiveKit’s recommended stack:
-
-| Role | Default model |
-|------|----------------|
-| STT | `deepgram/flux-general` |
-| LLM | `google/gemma-4-31b-it` |
-| TTS | `cartesia/sonic-3` |
-
-Optional overrides: `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
+Optional STT/TTS Inference overrides: `LIVEKIT_STT_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
 
 ## Canvas LLM provider
 
-Async Three.js / scene-ops generation uses the Vercel AI SDK. Default is **Claude Sonnet 5** (Anthropic).
+Async Three.js / scene-ops generation uses the same Vercel AI SDK provider. Default is **Claude Sonnet 5** (Anthropic).
 
 ```bash
 LLM_PROVIDER=anthropic
@@ -82,8 +78,9 @@ See [lib/domain/README.md](lib/domain/README.md) for adding custom domains.
 | Web client | Next.js, React Three Fiber, LiveKit React |
 | Token API | `/api/token` on Vercel |
 | Voice agent | LiveKit Agents worker (runs separately) |
-| Voice STT / LLM / TTS | LiveKit Inference |
-| Canvas LLM | Vercel AI SDK (Anthropic / OpenAI / Google) |
+| Voice STT / TTS | Deepgram or LiveKit Inference |
+| Voice LLM | Vercel AI SDK (Anthropic / OpenAI / Google / Kimi) |
+| Canvas LLM | Vercel AI SDK (same provider keys) |
 | GenUI | Async Three.js scene generation via tool calls |
 
 ## Deploy

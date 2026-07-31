@@ -4,6 +4,7 @@ import {
   CANVAS_DATA_TOPIC,
   type CanvasContentType,
   type CanvasDataMessage,
+  type LearnerProfile,
   type QuizSpec,
   type RenderCanvasInput,
 } from "../../lib/types.js";
@@ -91,4 +92,11 @@ export async function publishQuizRender(
   quiz: QuizSpec,
 ): Promise<void> {
   await publishCanvasMessage(room, { type: "quiz_render", quiz });
+}
+
+export async function publishLearnerProfile(
+  room: Room,
+  profile: LearnerProfile,
+): Promise<void> {
+  await publishCanvasMessage(room, { type: "learner_profile", profile });
 }

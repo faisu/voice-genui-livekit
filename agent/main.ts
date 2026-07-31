@@ -18,6 +18,7 @@ import {
 } from "../lib/types.js";
 import { resolveLlmModel, resolveLlmProvider } from "../lib/ai/index.js";
 import { resolveDomain } from "../lib/domain/index.js";
+import { buildOnboardingGreetingInstructions } from "../lib/domain/shared.js";
 import {
   createCanvasAgent,
   createVoiceSession,
@@ -26,6 +27,7 @@ import {
 } from "./pipeline.js";
 import {
   clearRoomSession,
+  getLearnerProfile,
   getQuizState,
   hasGreeted,
   markGreeted,
@@ -40,8 +42,8 @@ import {
 dotenv.config({ path: ".env.local" });
 dotenv.config();
 
-/** Wait briefly for student_profile before greeting so personalization applies. */
-const PROFILE_GREETING_WAIT_MS = 4000;
+/** Wait briefly for a returning student's saved profile before greeting. */
+const PROFILE_GREETING_WAIT_MS = 2500;
 
 export default defineAgent<AgentProcessUserData>({
   prewarm: prewarmAgent,
@@ -53,6 +55,8 @@ export default defineAgent<AgentProcessUserData>({
     logger.info(
       {
         roomName,
+        voiceProvider: resolveLlmProvider(),
+        voiceModel: resolveLlmModel("chat"),
         canvasProvider: resolveLlmProvider(),
         canvasModel: resolveLlmModel("render"),
       },
@@ -79,7 +83,7 @@ export default defineAgent<AgentProcessUserData>({
 
       active.on(AgentSessionEventTypes.Close, (event) => {
         sessionAlive = false;
-        if (shuttingDown) return;
+        if (shuttingDown || restarting) return;
         if (
           event.reason === CloseReason.ERROR &&
           room.remoteParticipants.size > 0
@@ -96,12 +100,21 @@ export default defineAgent<AgentProcessUserData>({
     const restartSession = async () => {
       if (shuttingDown || restarting) return;
       restarting = true;
+      sessionAlive = false;
       try {
         try {
           await session.close();
         } catch {
           // already closed
         }
+        // RoomSessionTransport should unregister this, but a raced close can leave it set.
+        try {
+          room.unregisterByteStreamHandler("lk.agent.session");
+        } catch {
+          // already cleared
+        }
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
         session = createVoiceSession();
         wireSessionEvents(session);
         await session.start({ agent, room });
@@ -109,6 +122,7 @@ export default defineAgent<AgentProcessUserData>({
         logger.info("Voice session restarted");
       } catch (error) {
         logger.error({ error }, "Failed to restart voice session");
+        sessionAlive = false;
       } finally {
         restarting = false;
       }
@@ -188,9 +202,25 @@ export default defineAgent<AgentProcessUserData>({
     const issueGreeting = () => {
       if (hasGreeted(roomName) || shuttingDown) return;
       markGreeted(roomName);
+      const domain = resolveDomain();
+      const profile = getLearnerProfile(roomName);
+      const instructions = profile
+        ? domain.greetingInstructions
+        : buildOnboardingGreetingInstructions({
+            teacherRole: domain.teacherTitle.toLowerCase(),
+            subjectExamples: "concept",
+            topicExamples: domain.conceptSuggestions
+              .slice(0, 3)
+              .map((item) => item.label)
+              .join(", "),
+          });
+      logger.info(
+        { hasProfile: Boolean(profile), mode: profile ? "returning" : "onboarding" },
+        "Issuing greeting",
+      );
       void runUserReply({
         userInput: "Hello",
-        instructions: resolveDomain().greetingInstructions,
+        instructions,
       });
     };
 
@@ -213,6 +243,7 @@ export default defineAgent<AgentProcessUserData>({
           logger.info({ profile: message.profile }, "Received student profile");
           setLearnerProfile(roomName, message.profile);
           void agent.refreshInstructions().then(() => {
+            // Returning student with a saved profile — greet once with personalization.
             if (!hasGreeted(roomName)) {
               issueGreeting();
             }

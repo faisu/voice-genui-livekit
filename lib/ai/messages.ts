@@ -34,6 +34,9 @@ export function convertChatContextToModelMessages(items: ChatItem[]): ModelMessa
         messages.push({ role: "assistant", content: text });
       } else if (message.role === "user") {
         messages.push({ role: "user", content: text });
+      } else if (message.role === "system" || message.role === "developer") {
+        // LiveKit injects agent instructions as a system message.
+        messages.push({ role: "system", content: text });
       }
       continue;
     }
