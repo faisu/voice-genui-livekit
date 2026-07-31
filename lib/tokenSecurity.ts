@@ -1,5 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
-
 /** Max LiveKit JWT mints per IP within the window. */
 export const TOKEN_RATE_LIMIT = 8;
 /** Sliding window for mint rate limiting (ms). */
@@ -66,47 +64,6 @@ export function checkRateLimit(ip: string): {
     remaining: TOKEN_RATE_LIMIT - existing.count,
     retryAfterSec: Math.max(1, Math.ceil((existing.resetAt - now) / 1000)),
   };
-}
-
-export function timingSafeStringEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) {
-    timingSafeEqual(aBuf, aBuf);
-    return false;
-  }
-  return timingSafeEqual(aBuf, bBuf);
-}
-
-/**
- * Access gate for feedback sharing.
- * - Production: FEEDBACK_ACCESS_CODE must be set (fail closed).
- * - Development: code optional; if set, it is enforced.
- */
-export function verifyAccessCode(provided: string | undefined): {
-  ok: boolean;
-  status: number;
-  error?: string;
-} {
-  const expected = process.env.FEEDBACK_ACCESS_CODE?.trim() ?? "";
-  const isProd = process.env.NODE_ENV === "production";
-
-  if (!expected) {
-    if (isProd) {
-      return {
-        ok: false,
-        status: 503,
-        error: "Feedback access gate is not configured",
-      };
-    }
-    return { ok: true, status: 200 };
-  }
-
-  if (!provided || !timingSafeStringEqual(provided, expected)) {
-    return { ok: false, status: 401, error: "Invalid access code" };
-  }
-
-  return { ok: true, status: 200 };
 }
 
 export function isOriginAllowed(request: Request): boolean {

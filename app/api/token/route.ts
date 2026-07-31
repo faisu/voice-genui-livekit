@@ -7,7 +7,6 @@ import {
   getClientIp,
   isOriginAllowed,
   sanitizeParticipantLabel,
-  verifyAccessCode,
 } from "@/lib/tokenSecurity";
 
 const AGENT_NAME = process.env.LIVEKIT_AGENT_NAME ?? "voice-genui-agent";
@@ -31,23 +30,12 @@ export async function POST(request: Request) {
   let body: {
     roomName?: string;
     participantName?: string;
-    accessCode?: string;
   } = {};
 
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const accessResult = verifyAccessCode(
-    body.accessCode ?? request.headers.get("x-access-code") ?? undefined,
-  );
-  if (!accessResult.ok) {
-    return NextResponse.json(
-      { error: accessResult.error ?? "Unauthorized" },
-      { status: accessResult.status },
-    );
   }
 
   const ip = getClientIp(request);

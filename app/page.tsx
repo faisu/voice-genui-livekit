@@ -38,7 +38,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type FormEvent,
 } from "react";
 
 type TokenResponse = {
@@ -327,7 +326,6 @@ function VoiceGenUIApp({
   );
 }
 
-const ACCESS_CODE_STORAGE_KEY = "voice-genui-access-code";
 
 export default function HomePage() {
   return (
@@ -343,8 +341,6 @@ function HomePageContent() {
   const [session, setSession] = useState<TokenResponse | null>(null);
   const [profile, setProfile] = useState<LearnerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [accessCode, setAccessCode] = useState("");
-  const [gateRequired, setGateRequired] = useState(false);
   const [booting, setBooting] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const reconnectKeyRef = useRef(0);
@@ -352,7 +348,7 @@ function HomePageContent() {
   const intentionalLeaveRef = useRef(false);
   const [leftLab, setLeftLab] = useState(false);
 
-  const connect = useCallback(async (code: string) => {
+  const connect = useCallback(async () => {
     setConnecting(true);
     setError(null);
 
@@ -360,7 +356,7 @@ function HomePageContent() {
       const response = await fetch("/api/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accessCode: code || undefined }),
+        body: JSON.stringify({}),
       });
 
       const payload = (await response.json().catch(() => null)) as
@@ -368,14 +364,6 @@ function HomePageContent() {
         | null;
 
       if (!response.ok) {
-        if (response.status === 401 || response.status === 503) {
-          try {
-            sessionStorage.removeItem(ACCESS_CODE_STORAGE_KEY);
-          } catch {
-            // ignore
-          }
-          setGateRequired(true);
-        }
         throw new Error(
           payload?.error ?? `Failed to fetch LiveKit token (${response.status})`,
         );
@@ -384,14 +372,6 @@ function HomePageContent() {
       if (!payload?.token || !payload.url) {
         throw new Error("Invalid token response");
       }
-
-      try {
-        if (code) sessionStorage.setItem(ACCESS_CODE_STORAGE_KEY, code);
-      } catch {
-        // ignore
-      }
-
-      setGateRequired(false);
 
       const token: TokenResponse = {
         token: payload.token,
@@ -422,15 +402,8 @@ function HomePageContent() {
     let cancelled = false;
 
     async function boot() {
-      let saved = "";
-      try {
-        saved = sessionStorage.getItem(ACCESS_CODE_STORAGE_KEY) ?? "";
-      } catch {
-        // sessionStorage may be unavailable
-      }
       if (cancelled) return;
-      if (saved) setAccessCode(saved);
-      await connect(saved);
+      await connect();
     }
 
     void boot();
@@ -451,13 +424,6 @@ function HomePageContent() {
     }),
     [],
   );
-
-  const onAccessSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const trimmed = accessCode.trim();
-    setAccessCode(trimmed);
-    void connect(trimmed);
-  };
 
   const onProfileSubmit = (next: LearnerProfile) => {
     saveLearnerProfile(next);
@@ -519,60 +485,34 @@ function HomePageContent() {
   if (!session || !profile) {
     return (
       <div className="flex h-full items-center justify-center bg-[#050508] px-6">
-        <form
-          onSubmit={onAccessSubmit}
-          className="w-full max-w-sm space-y-5"
-        >
+        <div className="w-full max-w-sm space-y-5">
           <div className="space-y-2 text-center">
             <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">
               {domain.labName}
             </p>
             <h1 className="text-xl font-semibold text-zinc-100">
-              {gateRequired ? "Enter access code" : "Unable to connect"}
+              Unable to connect
             </h1>
             <p className="text-sm text-zinc-400">
-              {gateRequired
-                ? "This preview is gated so sessions and API usage stay limited to invited feedback."
-                : "Check your connection, then try again."}
+              Check your connection, then try again.
             </p>
           </div>
-          {gateRequired ? (
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={accessCode}
-              onChange={(event) => setAccessCode(event.target.value)}
-              placeholder="Access code"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900/80 px-3 py-2.5 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-sky-500"
-              disabled={connecting}
-            />
-          ) : null}
           {error ? (
             <p className="text-center text-sm text-red-400">{error}</p>
           ) : null}
-          {gateRequired ? (
-            <button
-              type="submit"
-              disabled={connecting || !accessCode.trim()}
-              className="w-full rounded-lg bg-sky-500 px-3 py-2.5 text-sm font-medium text-white transition enabled:hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Enter lab
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                reconnectKeyRef.current += 1;
-                setBooting(true);
-                setError(null);
-                setReconnectKey(reconnectKeyRef.current);
-              }}
-              className="w-full rounded-lg bg-sky-500 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-sky-400"
-            >
-              Try again
-            </button>
-          )}
-        </form>
+          <button
+            type="button"
+            onClick={() => {
+              reconnectKeyRef.current += 1;
+              setBooting(true);
+              setError(null);
+              setReconnectKey(reconnectKeyRef.current);
+            }}
+            className="w-full rounded-lg bg-sky-500 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-sky-400"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     );
   }
