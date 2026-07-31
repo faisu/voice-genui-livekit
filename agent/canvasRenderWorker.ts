@@ -2,51 +2,98 @@ import type { Room } from "@livekit/rtc-node";
 import { log } from "@livekit/agents";
 import { streamText, tool } from "ai";
 import { z } from "zod";
-import { getLanguageModel, resolveLlmModel, resolveLlmProvider, getRenderProviderOptions } from "../lib/ai/index.js";
-import type { RenderCanvasInput } from "../lib/types.js";
 import {
-  buildStreamingPartialJson,
-  extractPartialContentField,
-  parseEmitCanvasContent,
-} from "../lib/partialJson.js";
+  getLanguageModel,
+  resolveLlmModel,
+  resolveLlmProvider,
+  getRenderProviderOptions,
+} from "../lib/ai/index.js";
+import type { RenderCanvasInput } from "../lib/types.js";
+import { serializeSceneOpsDocument } from "../lib/sceneOps.js";
+import { buildStreamingPartialJson, parseEmitRecipeArgs } from "../lib/partialJson.js";
 import { resolveDomain } from "../lib/domain/index.js";
-import { SCENE_OPS_PROMPT } from "../lib/sceneOps.js";
-import { getCanvasState } from "./session.js";
+import {
+  getAccumulatedSceneOps,
+  getLearnerProfile,
+  setAccumulatedSceneOps,
+  setDemoSummary,
+  setLastSkillId,
+} from "./session.js";
 import {
   publishToolCallComplete,
   publishToolCallDelta,
 } from "./tools/renderCanvas.js";
 import type { RenderCanvasRequest } from "./tools/renderCanvasTool.js";
+import { AGE_BAND_OPTIONS } from "../lib/learnerProfile.js";
+import {
+  parseEmitRecipe,
+  resolveRecipeEmit,
+  skillCatalogPrompt,
+  type DemoSummary,
+} from "../lib/recipes/index.js";
 
-const DELTA_THROTTLE_MS = 180;
-const DELTA_MIN_CHARS = 72;
+const DELTA_THROTTLE_MS = 2500;
+const DEFAULT_MAX_OUTPUT_TOKENS = 1800;
 
-const emitCanvasContentSchema = z.object({
-  content_type: z.enum(["threejs", "scene_ops"]),
-  content: z.string(),
+const emitRecipeSchema = z.object({
+  skillId: z
+    .string()
+    .optional()
+    .describe("Preferred: registered recipe skill id (e.g. projectile)."),
+  paramOverrides: z
+    .record(z.string(), z.number())
+    .optional()
+    .describe("Optional numeric param overrides for the skill."),
+  observe: z.string().max(280).optional(),
+  title: z.string().max(120).optional(),
+  ops: z
+    .unknown()
+    .optional()
+    .describe("Freeform SceneOpsDocument fallback when no skill fits."),
 });
 
 function logger() {
   return log();
 }
 
-function buildUserPrompt(request: RenderCanvasRequest, roomName: string): string {
+function buildUserPrompt(
+  request: RenderCanvasRequest,
+  roomName: string,
+  repairHint?: string,
+): string {
   const domain = resolveDomain();
+  const profile = getLearnerProfile(roomName);
   const parts = [
     domain.renderUserPromptPrefix,
-    `Title: ${request.title ?? "Untitled"}`,
+    `Title hint: ${request.title ?? "Untitled"}`,
     `Lesson brief: ${request.visual_brief}`,
     `Mode: ${request.mode}`,
-    `Preferred content_type: ${request.content_type ?? "threejs"}`,
+    "Call emit_recipe with skillId + paramOverrides when a skill matches. Otherwise emit ops as scene_ops.",
+    `Registered skills:\n${skillCatalogPrompt()}`,
   ];
 
+  if (profile) {
+    const ageLabel =
+      AGE_BAND_OPTIONS.find((option) => option.value === profile.ageBand)
+        ?.label ?? profile.ageBand;
+    parts.push(
+      `Learner: ${profile.name} (age band ${ageLabel}). Match complexity to this level.`,
+    );
+  }
+
   if (request.mode === "patch") {
-    const existing = getCanvasState(roomName);
-    if (existing?.content) {
+    const existing = getAccumulatedSceneOps(roomName);
+    if (existing) {
       parts.push(
-        `Existing scene to patch (${existing.content_type}):\n${existing.content}`,
+        `Existing scene_ops (for context). Prefer re-emitting the same skillId with updated paramOverrides:\n${JSON.stringify(existing).slice(0, 2000)}`,
       );
     }
+  }
+
+  if (repairHint) {
+    parts.push(
+      `Previous emit was invalid. Fix these issues and call emit_recipe again:\n${repairHint}`,
+    );
   }
 
   return parts.join("\n\n");
@@ -54,90 +101,53 @@ function buildUserPrompt(request: RenderCanvasRequest, roomName: string): string
 
 export type CanvasRenderJobResult = {
   title?: string;
-  content_type: "threejs" | "scene_ops";
+  content_type: "scene_ops";
   content: string;
   content_length: number;
+  summary: DemoSummary;
+  skillId?: string;
 };
 
-export async function runCanvasRenderJob(options: {
-  room: Room;
-  roomName: string;
+async function requestRecipeFromModel(options: {
   request: RenderCanvasRequest;
+  roomName: string;
   abortSignal?: AbortSignal;
-  /** When false, caller publishes the complete message (staged path). Default true. */
-  publishComplete?: boolean;
-  preferSceneOps?: boolean;
-  maxOutputTokens?: number;
-}): Promise<CanvasRenderJobResult> {
-  const {
-    room,
-    roomName,
-    request,
-    abortSignal,
-    publishComplete = true,
-    preferSceneOps = false,
-    maxOutputTokens = preferSceneOps ? 2200 : 8192,
-  } = options;
+  maxOutputTokens: number;
+  repairHint?: string;
+  onToolDelta?: () => Promise<void>;
+}): Promise<{ raw: unknown; toolArguments: string }> {
   const domain = resolveDomain();
+  const { request, roomName, abortSignal, maxOutputTokens, repairHint, onToolDelta } =
+    options;
 
-  const emitCanvasContent = tool({
-    description: preferSceneOps
-      ? `Emit a scene_ops JSON document for a staged ${domain.subject.toLowerCase()} teaching scene.`
-      : `Emit the finished full-viewport Three.js ${domain.subject.toLowerCase()} scene.`,
-    inputSchema: emitCanvasContentSchema,
+  const emitRecipe = tool({
+    description: `Emit a recipe skill or constrained scene_ops for ${domain.subject.toLowerCase()}. Never emit HTML, SVG, or Three.js code.`,
+    inputSchema: emitRecipeSchema,
     execute: async (input) => input,
   });
 
-  let toolArguments = "";
-  let lastPublishedContent = "";
-  let lastPublishAt = 0;
-  let pendingContent = "";
-  let pendingPartialJson = "";
+  const systemPrompt = `${domain.renderSystemPrompt}\nYou MUST call the emit_recipe tool — do not answer with plain text.`;
 
-  const contentTypeHint = preferSceneOps ? "scene_ops" : "threejs";
-
-  const flushDelta = async (force = false) => {
-    if (!pendingContent && !force) return;
-    const grew = pendingContent.length - lastPublishedContent.length;
-    const elapsed = Date.now() - lastPublishAt;
-    if (!force && pendingContent && grew < DELTA_MIN_CHARS && elapsed < DELTA_THROTTLE_MS) {
-      return;
-    }
-
-    if (pendingContent) {
-      lastPublishedContent = pendingContent;
-      lastPublishAt = Date.now();
-      await publishToolCallDelta(room, pendingPartialJson);
-    }
-  };
-
-  const systemPrompt = preferSceneOps
-    ? `${domain.renderSystemPrompt}\n\nSTAGED SCENE_OPS MODE (override threejs default):\n${SCENE_OPS_PROMPT}\nAlways set content_type to "scene_ops". The content field must be a JSON string (escaped) of {"version":1,"ops":[...]}.\nYou MUST call the emit_canvas_content tool — do not answer with plain text.`
-    : `${domain.renderSystemPrompt}\nYou MUST call the emit_canvas_content tool — do not answer with plain text.`;
-
-  // Kimi K3 always thinks and rejects tool_choice that names a specific function.
-  // Use "required" (must call a tool) instead of forcing emit_canvas_content by name.
   const provider = resolveLlmProvider();
   const modelId = resolveLlmModel("render");
   const renderProviderOptions = getRenderProviderOptions();
   logger().info(
-    { provider, modelId, preferSceneOps, title: request.title },
-    "Starting canvas render job",
+    { provider, modelId, title: request.title, repair: Boolean(repairHint) },
+    "Starting recipe render job",
   );
 
   const toolChoice =
     provider === "kimi"
       ? ("required" as const)
-      : ({ type: "tool", toolName: "emit_canvas_content" } as const);
+      : ({ type: "tool", toolName: "emit_recipe" } as const);
+
+  let toolArguments = "";
 
   const result = streamText({
     model: getLanguageModel("render"),
     system: systemPrompt,
-    prompt: buildUserPrompt(
-      { ...request, content_type: preferSceneOps ? "scene_ops" : request.content_type },
-      roomName,
-    ),
-    tools: { emit_canvas_content: emitCanvasContent },
+    prompt: buildUserPrompt(request, roomName, repairHint),
+    tools: { emit_recipe: emitRecipe },
     toolChoice,
     abortSignal,
     maxOutputTokens,
@@ -153,68 +163,170 @@ export async function runCanvasRenderJob(options: {
 
     if (part.type === "tool-input-delta") {
       toolArguments += part.inputTextDelta;
-      const content = extractPartialContentField(toolArguments);
-      if (content) {
-        pendingContent = content;
-        pendingPartialJson = buildStreamingPartialJson(
-          {
-            mode: request.mode,
-            content_type: contentTypeHint,
-            title: request.title,
-            lesson_id: request.lesson_id,
-            stage_id: request.stage_id,
-            stage_index: request.stage_index,
-            total_stages: request.total_stages,
-          },
-          content,
-        );
-        await flushDelta(false);
-      }
+      await onToolDelta?.();
     }
 
-    if (part.type === "tool-call" && part.toolName === "emit_canvas_content") {
+    if (part.type === "tool-call" && part.toolName === "emit_recipe") {
       toolArguments = JSON.stringify(part.input ?? {});
     }
   }
 
-  await flushDelta(true);
+  const raw = parseEmitRecipeArgs(toolArguments);
+  return { raw, toolArguments };
+}
 
-  const emitted = parseEmitCanvasContent(toolArguments);
-  if (!emitted) {
-    throw new Error("Background render did not produce canvas content");
+export async function runCanvasRenderJob(options: {
+  room: Room;
+  roomName: string;
+  request: RenderCanvasRequest;
+  abortSignal?: AbortSignal;
+  publishComplete?: boolean;
+  maxOutputTokens?: number;
+}): Promise<CanvasRenderJobResult> {
+  const {
+    room,
+    roomName,
+    request,
+    abortSignal,
+    publishComplete = true,
+    maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS,
+  } = options;
+
+  let lastPublishAt = 0;
+  let publishedBuildingDelta = false;
+
+  const publishBuildingDelta = async (force = false) => {
+    const elapsed = Date.now() - lastPublishAt;
+    if (!force && publishedBuildingDelta && elapsed < DELTA_THROTTLE_MS) {
+      return;
+    }
+    lastPublishAt = Date.now();
+    publishedBuildingDelta = true;
+    await publishToolCallDelta(
+      room,
+      buildStreamingPartialJson(
+        {
+          mode: request.mode,
+          content_type: "scene_ops",
+          title: request.title,
+        },
+        "",
+      ),
+    );
+  };
+
+  await publishBuildingDelta(true);
+
+  let repairHint: string | undefined;
+  let resolved: Awaited<ReturnType<typeof resolveOnce>> | null = null;
+  let lastPreview = "";
+  let lastError = "Model did not emit a valid recipe";
+
+  async function resolveOnce(raw: unknown) {
+    const payload = parseEmitRecipe(raw);
+    if (!payload) {
+      return { error: "Model did not emit a recipe payload" } as const;
+    }
+    return resolveRecipeEmit(payload, request.visual_brief);
   }
 
-  // Prefer explicit model choice; if preferSceneOps, coerce when possible.
-  let content_type = emitted.content_type;
-  if (preferSceneOps && content_type !== "scene_ops") {
-    // Model ignored instruction — keep threejs so caller can fallback/retry.
-    content_type = emitted.content_type;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { raw, toolArguments } = await requestRecipeFromModel({
+      request,
+      roomName,
+      abortSignal,
+      maxOutputTokens,
+      repairHint,
+      onToolDelta: () => publishBuildingDelta(false),
+    });
+    lastPreview = toolArguments.slice(0, 500);
+
+    const result = await resolveOnce(raw);
+    if ("error" in result) {
+      lastError = result.error;
+      repairHint = result.error;
+      logger().warn(
+        { attempt, error: result.error, preview: lastPreview },
+        "Recipe emit validation failed",
+      );
+      continue;
+    }
+    resolved = result;
+    break;
   }
+
+  // Hard fallback to nearest skill from brief
+  if (!resolved) {
+    const fallback = resolveRecipeEmit({}, request.visual_brief);
+    if (!("error" in fallback)) {
+      resolved = fallback;
+      logger().warn(
+        { skillId: fallback.skillId },
+        "Using keyword skill fallback after emit failures",
+      );
+    }
+  }
+
+  if (!resolved) {
+    logger().error(
+      { preview: lastPreview, error: lastError },
+      "Background render did not produce a valid recipe",
+    );
+    throw new Error(
+      `Background render did not produce a valid recipe: ${lastError}`,
+    );
+  }
+
+  const content = serializeSceneOpsDocument(resolved.doc);
+  const title = request.title ?? resolved.summary.title;
+  const summary: DemoSummary = {
+    ...resolved.summary,
+    title,
+  };
+
+  setAccumulatedSceneOps(roomName, "live", resolved.doc);
+  setLastSkillId(roomName, resolved.skillId ?? null);
+  setDemoSummary(roomName, summary);
+
+  logger().info(
+    {
+      title,
+      contentLength: content.length,
+      skillId: resolved.skillId,
+      ops: resolved.doc.ops.length,
+    },
+    "Recipe resolved; publishing scene_ops to client",
+  );
 
   const input: RenderCanvasInput = {
     mode: request.mode,
-    content_type,
-    content: emitted.content,
-    title: request.title,
-    lesson_id: request.lesson_id,
-    stage_id: request.stage_id,
-    stage_index: request.stage_index,
-    total_stages: request.total_stages,
+    content_type: "scene_ops",
+    content,
+    title,
   };
 
   if (publishComplete) {
-    await publishToolCallComplete(room, roomName, input);
+    try {
+      await publishToolCallComplete(room, roomName, input);
+    } catch (error) {
+      logger().error(
+        {
+          error,
+          title: input.title,
+          contentLength: input.content.length,
+        },
+        "Failed to publish canvas content to client",
+      );
+      throw error;
+    }
   }
-
-  logger().info(
-    { title: input.title, content_type: input.content_type },
-    "Background canvas render complete",
-  );
 
   return {
     title: input.title,
-    content_type: input.content_type,
+    content_type: "scene_ops",
     content: input.content,
     content_length: input.content.length,
+    summary,
+    skillId: resolved.skillId,
   };
 }

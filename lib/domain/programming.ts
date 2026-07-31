@@ -16,7 +16,7 @@ export const programmingDomain: DomainConfig = {
   teacherTitle: "Programming Mentor",
   tagline: "What concept should we build?",
   description:
-    "Speak any programming concept and watch the viewport become an interactive algorithm visualization or system diagram with a live voice mentor.",
+    "Speak any programming concept and watch the viewport become an interactive Three.js algorithm visualization or system diagram with a live voice mentor.",
   openingLabel: "Opening code lab",
   captionPlaceholder:
     "Ask about algorithms, data structures, or systems — visualizations fill the full view.",
@@ -30,11 +30,11 @@ export const programmingDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for learners (beginner through intermediate).
 - Connect code abstractions to visual models (memory, pointers, trees, flows).
 - Use precise but accessible language; avoid jargon without explanation.
-- For concepts involving algorithms, data structures, or system behavior — MUST call render_canvas with stages (2–4 progressive steps).
-- Prefer staged builds; use mode patch (visual_brief only) to step through states or change inputs.`,
+- For concepts involving algorithms, data structures, or system behavior — MUST call render_canvas with a detailed visual_brief for one interactive Three.js demo.
+- Prefer one clear demo; use mode patch (visual_brief only) to step through states or change inputs.`,
     renderTriggers: "algorithms, data structures, memory, networks",
     visualBriefExtras:
-      "Specify data elements as 3D nodes/blocks, highlight active steps, show pointers/arrows, and include step counters or complexity readouts.",
+      "Specify data elements as 3D nodes/blocks, highlight active steps, show pointers/arrows, include step counters and play/step controls.",
   }),
 
   agentInstructions: buildAgentInstructions("programming", "programming mentor"),
@@ -49,23 +49,18 @@ export const programmingDomain: DomainConfig = {
     accuracyNote:
       "Algorithm steps and data structure layouts must match the described logic",
     sceneGuidance:
-      "Use colored blocks for array elements, linked nodes for lists/trees, and arrows for pointers. Animate swaps, traversals, and state transitions step-by-step. Include a step counter and current-operation label.",
+      "Use colored box/sphere blocks for array elements and nodes; arrows for pointers. Prefer oscillate for swaps and traversals. Prefer clear Three.js algorithm demos.",
   }),
 
   renderUserPromptPrefix:
-    "Render a FULL-VIEWPORT threejs programming teaching scene that fills the student's entire view.",
+    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive programming Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL viewport with an interactive programming visualization. " +
-    "Prefer stages[] (2–4): id, brief (visual adds), narrate (spoken AFTER appear). " +
-    "Stage 1 = data layout; later stages highlight algorithm steps. " +
-    "For single-shot or tiny patches, pass visual_brief instead. Never pass raw Three.js.",
+    "Replace or patch the FULL viewport with an interactive programming Three.js visualization. " +
+    "Pass visual_brief describing the full interactive demo. A verified summary is returned when live.",
 
   visualBriefDescription:
-    "Single-shot programming lesson spec (when stages omitted): concept, data structure layout, algorithm steps, highlights, labels, colors, camera, step animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
-
-  quizConceptDescription:
-    "The programming concept being assessed (e.g. 'binary search', 'recursion base case').",
+    "Programming lesson spec for Three.js lab: concept, data structure layout, algorithm steps, highlights, labels, colors, step motion, play/pause/reset, what to observe.",
 
   conceptSuggestions: [
     { label: "Binary search", prompt: "Visualize binary search on a sorted array." },

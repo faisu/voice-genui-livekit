@@ -9,11 +9,8 @@ import type {
   ChatMessage,
   ConnectionStatus,
   LearnerProfile,
-  QuizAnswer,
-  QuizSpec,
 } from "@/lib/types";
 import { ChatOverlay } from "./world/ChatOverlay";
-import { QuizOverlay } from "./world/QuizOverlay";
 import { ScreenAgentOrb } from "./world/ScreenAgentOrb";
 
 const AgentWorldCanvas = dynamic(
@@ -31,7 +28,6 @@ const AgentWorldCanvas = dynamic(
 type WorldCanvasProps = {
   messages: ChatMessage[];
   worldState: CanvasWorldState;
-  quiz: QuizSpec | null;
   connectionStatus: ConnectionStatus;
   micEnabled: boolean;
   learnerProfile: LearnerProfile | null;
@@ -39,20 +35,12 @@ type WorldCanvasProps = {
   onToggleMic: () => void;
   onSendText: (text: string) => void;
   onCanvasEvent: (payload: unknown) => void;
-  onStageReady?: (payload: {
-    lesson_id: string;
-    stage_id: string;
-    stage_index: number;
-  }) => void;
-  onQuizSubmit: (quizId: string, answers: QuizAnswer[]) => void;
-  onQuizDismiss: () => void;
   onExitLab?: () => void;
 };
 
 export function WorldCanvas({
   messages,
   worldState,
-  quiz,
   connectionStatus,
   micEnabled,
   learnerProfile,
@@ -60,9 +48,6 @@ export function WorldCanvas({
   onToggleMic,
   onSendText,
   onCanvasEvent,
-  onStageReady,
-  onQuizSubmit,
-  onQuizDismiss,
   onExitLab,
 }: WorldCanvasProps) {
   const { state: agentState, agent } = useVoiceAssistant();
@@ -96,7 +81,6 @@ export function WorldCanvas({
       <AgentWorldCanvas
         demo={demo}
         onCanvasEvent={onCanvasEvent}
-        onStageReady={onStageReady}
       />
 
       <AudioUnlock />
@@ -118,8 +102,8 @@ export function WorldCanvas({
             Voice intro
           </p>
           <p className="mt-2 text-sm text-zinc-300">
-            Your teacher will ask a couple of quick questions out loud — just
-            speak your answers. No forms.
+            Your teacher will ask your name and age out loud — just speak your
+            answers. No forms.
           </p>
         </div>
       ) : null}
@@ -143,15 +127,6 @@ export function WorldCanvas({
         onSendText={handleSendText}
         onReturnToAgent={() => setChatMinimized(true)}
       />
-
-      {quiz && (
-        <QuizOverlay
-          key={quiz.quizId}
-          quiz={quiz}
-          onSubmit={(answers) => onQuizSubmit(quiz.quizId, answers)}
-          onDismiss={onQuizDismiss}
-        />
-      )}
 
       {connectionStatus !== "connected" || !agentPresent ? (
         <div className="pointer-events-none absolute right-4 top-4 z-10 flex flex-col items-end gap-1 text-xs text-zinc-400">

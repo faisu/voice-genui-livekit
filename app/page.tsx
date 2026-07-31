@@ -11,6 +11,11 @@ import {
   type CanvasWorldState,
 } from "@/lib/canvasObjects";
 import {
+  acceptCanvasChunk,
+  createCanvasChunkAccumulator,
+  type CanvasChunkMessage,
+} from "@/lib/canvasTransport";
+import {
   loadLearnerProfile,
   saveLearnerProfile,
 } from "@/lib/learnerProfile";
@@ -20,8 +25,6 @@ import {
   type CanvasEventMessage,
   type ChatMessage,
   type LearnerProfile,
-  type QuizAnswer,
-  type QuizSpec,
 } from "@/lib/types";
 import {
   LiveKitRoom,
@@ -59,7 +62,6 @@ function VoiceGenUIApp({
   const [worldState, setWorldState] = useState<CanvasWorldState>({
     demo: null,
   });
-  const [quiz, setQuiz] = useState<QuizSpec | null>(null);
   const [micEnabled, setMicEnabled] = useState(true);
   const [exiting, setExiting] = useState(false);
   const worldAccRef = useRef(createCanvasWorldAccumulator());
@@ -70,19 +72,34 @@ function VoiceGenUIApp({
       if (!delta && !isFinal) return;
 
       setChatMessages((prev) => {
+        const existingIdx = prev.findIndex((message) => message.id === streamId);
+        if (existingIdx >= 0) {
+          const existing = prev[existingIdx]!;
+          const next = prev.slice();
+          next[existingIdx] = {
+            ...existing,
+            text: delta ? existing.text + delta : existing.text,
+            isFinal: isFinal || Boolean(existing.isFinal),
+          };
+          return next;
+        }
+
+        if (!delta) return prev;
+
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.isFinal === false) {
+          // New stream while one is still open — close the previous bubble first.
           return [
             ...prev.slice(0, -1),
+            { ...last, isFinal: true },
             {
-              ...last,
-              text: delta ? last.text + delta : last.text,
+              id: streamId,
+              role: "assistant",
+              text: delta,
               isFinal,
             },
           ];
         }
-
-        if (!delta) return prev;
 
         return [
           ...prev,
@@ -104,14 +121,15 @@ function VoiceGenUIApp({
     setChatMessages((prev) => {
       const last = prev[prev.length - 1];
       if (last?.role === "assistant") {
-        if (last.text === text && last.isFinal) return prev;
+        // ConversationItemAdded often republishes text already streamed via deltas.
+        if (last.isFinal && last.text === text) return prev;
         return [...prev.slice(0, -1), { ...last, text, isFinal: true }];
       }
 
       return [
         ...prev,
         {
-          id: `assistant-${Date.now()}`,
+          id: `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           role: "assistant",
           text,
           isFinal: true,
@@ -129,7 +147,7 @@ function VoiceGenUIApp({
       return [
         ...prev,
         {
-          id: `user-${Date.now()}`,
+          id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           role: "user",
           text,
           isFinal,
@@ -143,51 +161,45 @@ function VoiceGenUIApp({
     setWorldState(toCanvasWorldState(worldAccRef.current));
   }, []);
 
-  const onCanvasDataMessage = useCallback(
-    (message: { payload: Uint8Array }) => {
-      try {
-        const payload = JSON.parse(
-          new TextDecoder().decode(message.payload),
-        ) as CanvasDataMessage;
+  const chunkAccRef = useRef(createCanvasChunkAccumulator());
 
-        if (
-          payload.type === "tool_call_delta" ||
-          payload.type === "tool_call_complete"
-        ) {
-          applyCanvasPayload(payload);
-          return;
-        }
+  const handleDecodedCanvasJson = useCallback(
+    (raw: string) => {
+      const payload = JSON.parse(raw) as CanvasDataMessage | CanvasChunkMessage;
 
-        if (payload.type === "assistant_text_delta") {
-          upsertAssistantDelta(
-            payload.streamId,
-            payload.delta,
-            payload.isFinal,
-          );
-          return;
-        }
+      if (payload.type === "canvas_chunk") {
+        const reassembled = acceptCanvasChunk(chunkAccRef.current, payload);
+        if (!reassembled) return;
+        handleDecodedCanvasJson(reassembled);
+        return;
+      }
 
-        if (payload.type === "assistant_text") {
-          finalizeAssistantText(payload.text);
-          return;
-        }
+      if (
+        payload.type === "tool_call_delta" ||
+        payload.type === "tool_call_complete"
+      ) {
+        applyCanvasPayload(payload);
+        return;
+      }
 
-        if (payload.type === "user_transcript") {
-          upsertTranscript(payload.text, payload.isFinal);
-          return;
-        }
+      if (payload.type === "assistant_text_delta") {
+        upsertAssistantDelta(payload.streamId, payload.delta, payload.isFinal);
+        return;
+      }
 
-        if (payload.type === "quiz_render") {
-          setQuiz(payload.quiz);
-          return;
-        }
+      if (payload.type === "assistant_text") {
+        finalizeAssistantText(payload.text);
+        return;
+      }
 
-        if (payload.type === "learner_profile") {
-          saveLearnerProfile(payload.profile);
-          onProfileChange(payload.profile);
-        }
-      } catch (error) {
-        console.error("Failed to parse canvas data message", error);
+      if (payload.type === "user_transcript") {
+        upsertTranscript(payload.text, payload.isFinal);
+        return;
+      }
+
+      if (payload.type === "learner_profile") {
+        saveLearnerProfile(payload.profile);
+        onProfileChange(payload.profile);
       }
     },
     [
@@ -197,6 +209,18 @@ function VoiceGenUIApp({
       upsertAssistantDelta,
       upsertTranscript,
     ],
+  );
+
+  const onCanvasDataMessage = useCallback(
+    (message: { payload: Uint8Array }) => {
+      try {
+        const raw = new TextDecoder().decode(message.payload);
+        handleDecodedCanvasJson(raw);
+      } catch (error) {
+        console.error("Failed to parse canvas data message", error);
+      }
+    },
+    [handleDecodedCanvasJson],
   );
 
   const { send: sendCanvasMessage } = useDataChannel(
@@ -226,7 +250,7 @@ function VoiceGenUIApp({
       setChatMessages((prev) => [
         ...prev,
         {
-          id: `user-${Date.now()}`,
+          id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           role: "user",
           text,
           isFinal: true,
@@ -243,28 +267,6 @@ function VoiceGenUIApp({
     },
     [publishMessage],
   );
-
-  const onStageReady = useCallback(
-    (payload: {
-      lesson_id: string;
-      stage_id: string;
-      stage_index: number;
-    }) => {
-      void publishMessage({ type: "stage_ready", ...payload });
-    },
-    [publishMessage],
-  );
-
-  const onQuizSubmit = useCallback(
-    (quizId: string, answers: QuizAnswer[]) => {
-      void publishMessage({ type: "quiz_answer", quizId, answers });
-    },
-    [publishMessage],
-  );
-
-  const onQuizDismiss = useCallback(() => {
-    setQuiz(null);
-  }, []);
 
   const handleExitLab = useCallback(async () => {
     if (exiting) return;
@@ -308,7 +310,6 @@ function VoiceGenUIApp({
       <WorldCanvas
         messages={chatMessages}
         worldState={worldState}
-        quiz={quiz}
         connectionStatus={connectionStatus}
         micEnabled={micEnabled}
         learnerProfile={profile}
@@ -316,9 +317,6 @@ function VoiceGenUIApp({
         onToggleMic={() => setMicEnabled((value) => !value)}
         onSendText={onSendText}
         onCanvasEvent={onCanvasEvent}
-        onStageReady={onStageReady}
-        onQuizSubmit={onQuizSubmit}
-        onQuizDismiss={onQuizDismiss}
         onExitLab={() => {
           void handleExitLab();
         }}

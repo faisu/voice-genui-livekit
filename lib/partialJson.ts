@@ -43,10 +43,6 @@ export function buildStreamingPartialJson(
     mode: "replace" | "patch";
     content_type: CanvasContentType;
     title?: string;
-    lesson_id?: string;
-    stage_id?: string;
-    stage_index?: number;
-    total_stages?: number;
   },
   contentFragment: string,
 ): string {
@@ -56,14 +52,6 @@ export function buildStreamingPartialJson(
     content: contentFragment,
   };
   if (request.title) payload.title = request.title;
-  if (request.lesson_id) payload.lesson_id = request.lesson_id;
-  if (request.stage_id) payload.stage_id = request.stage_id;
-  if (typeof request.stage_index === "number") {
-    payload.stage_index = request.stage_index;
-  }
-  if (typeof request.total_stages === "number") {
-    payload.total_stages = request.total_stages;
-  }
   return JSON.stringify(payload);
 }
 
@@ -83,63 +71,42 @@ export function parseEmitCanvasContent(raw: string): {
   const content = parsed.content;
   if (content == null || content === "") return null;
 
-  // Models sometimes emit scene_ops as an object instead of a JSON string.
-  if (typeof content === "object") {
-    return {
-      content_type: "scene_ops",
-      content: JSON.stringify(content),
-    };
-  }
-
   if (typeof content !== "string") return null;
 
-  const contentType = parsed.content_type;
-  if (contentType === "scene_ops") {
-    return { content_type: "scene_ops", content };
-  }
-
-  // Heuristic: if the string looks like scene_ops JSON, treat it as such.
-  const trimmed = content.trim();
-  if (
-    trimmed.startsWith("{") &&
-    (trimmed.includes('"ops"') || trimmed.includes('"ensureLab"'))
-  ) {
-    return { content_type: "scene_ops", content };
-  }
-  if (trimmed.startsWith("[") && trimmed.includes('"op"')) {
-    return { content_type: "scene_ops", content };
-  }
-
-  // Accept legacy / threejs content_type values.
-  return { content_type: "threejs", content };
+  return { content_type: "scene_ops", content };
 }
 
-/** Best-effort extract of stage metadata from streaming partial JSON. */
+/** Extract recipe emit payload from emit_recipe tool arguments. */
+export function parseEmitRecipeArgs(raw: string): unknown | null {
+  const parsed = safeParseJson(raw);
+  if (parsed.skillId || parsed.ops || parsed.recipe || parsed.version === 1) {
+    return parsed;
+  }
+  if (parsed.spec && typeof parsed.spec === "object") {
+    return parsed.spec;
+  }
+  return Object.keys(parsed).length ? parsed : null;
+}
+
+/** @deprecated VisualSpec path removed. */
+export function parseEmitVisualSpec(raw: string): unknown | null {
+  return parseEmitRecipeArgs(raw);
+}
+
+/** Best-effort extract of metadata from streaming partial JSON. */
 export function extractPartialStageMeta(partialJson: string): {
   title?: string;
-  lesson_id?: string;
-  stage_id?: string;
-  stage_index?: number;
-  total_stages?: number;
   content_type?: CanvasContentType;
 } {
   const parsed = safeParseJson(partialJson);
   const meta: {
     title?: string;
-    lesson_id?: string;
-    stage_id?: string;
-    stage_index?: number;
-    total_stages?: number;
     content_type?: CanvasContentType;
   } = {};
 
   if (typeof parsed.title === "string") meta.title = parsed.title;
-  if (typeof parsed.lesson_id === "string") meta.lesson_id = parsed.lesson_id;
-  if (typeof parsed.stage_id === "string") meta.stage_id = parsed.stage_id;
-  if (typeof parsed.stage_index === "number") meta.stage_index = parsed.stage_index;
-  if (typeof parsed.total_stages === "number") meta.total_stages = parsed.total_stages;
-  if (parsed.content_type === "scene_ops" || parsed.content_type === "threejs") {
-    meta.content_type = parsed.content_type;
+  if (parsed.content_type === "scene_ops") {
+    meta.content_type = "scene_ops";
   }
   return meta;
 }

@@ -30,11 +30,12 @@ export const physicsDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for students (high school through early college).
 - Use vivid, accurate physics language but stay conversational for voice.
 - Build intuition first, then light equations, then invite interaction with the demo.
-- For almost every concept that involves motion, forces, fields, or geometry — MUST call render_canvas with stages (2–4 progressive steps).
-- Prefer staged builds; use mode patch (visual_brief only) for small refinements instead of spawning many demos.`,
+- For almost every concept that involves motion, forces, fields, or geometry — MUST call render_canvas with a detailed visual_brief for one interactive Three.js demo.
+- Prefer Recipe Skills: projectile, simplePendulum, circularOrbit, shmSpring, inclinedPlane.
+- Prefer one clear demo; use mode patch (visual_brief only) for small refinements instead of spawning many demos.`,
     renderTriggers: "motion, forces, fields, geometry",
     visualBriefExtras:
-      "Specify parameters with units (mass, g, angle, velocity, k, wavelength…). Draw velocity/force vectors as colored arrows.",
+      "Specify parameters with units (mass, g, angle, velocity…). Prefer skillIds. Include play/pause/reset and at least one adjustable parameter.",
   }),
 
   agentInstructions: buildAgentInstructions("physics", "physics teacher"),
@@ -49,31 +50,26 @@ export const physicsDomain: DomainConfig = {
     accuracyNote:
       "Physics must be visually correct (gravity down −Y, consistent units, realistic relative motion)",
     sceneGuidance:
-      "Draw velocity/force vectors as colored arrows with clear meaning. Prefer MeshStandardMaterial for main bodies. Readable contrast colors (cyan/amber accents on dark backgrounds). Always include an animateCamera cinematic intro that frames the apparatus before free orbit.",
+      "Prefer skills projectile, simplePendulum, circularOrbit, shmSpring, inclinedPlane. Use sphere/box/cylinder/arrows/trails. Cyan/amber accents on dark lab.",
   }),
 
   renderUserPromptPrefix:
-    "Render a FULL-VIEWPORT threejs physics teaching scene that fills the student's entire lab view.",
+    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive physics Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL lab viewport with an interactive physics demonstration. " +
-    "Prefer stages[] (2–4): each stage has id, brief (visual adds only), and narrate (spoken AFTER it appears). " +
-    "Stage 1 = lab + core object; later stages add forces/vectors/motion. " +
-    "For single-shot or tiny patches, pass visual_brief instead (no stages). " +
-    "Never pass raw Three.js. Returns while the simulation builds asynchronously.",
+    "Replace or patch the FULL lab viewport with an interactive physics Three.js demo. " +
+    "Pass visual_brief describing the demo (prefer Recipe Skills). " +
+    "A verified summary is returned when the demo is live.",
 
   visualBriefDescription:
-    "Single-shot physics lesson spec (when stages omitted): concept, objects, forces/vectors, parameters (mass, g, angle, velocity), labels, colors, cinematic intro camera keyframes, animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
-
-  quizConceptDescription:
-    "The physics concept being assessed (e.g. 'projectile motion', 'conservation of momentum').",
+    "Physics lesson brief: concept, preferred skillId if known, objects, forces/vectors, parameters (mass, g, angle, velocity), motion, play/pause/reset + slider, what to observe.",
 
   conceptSuggestions: [
     { label: "Projectile motion", prompt: "Explain projectile motion with an interactive demo." },
     { label: "Simple pendulum", prompt: "Show me how a simple pendulum works." },
-    { label: "Newton's laws", prompt: "Teach Newton's three laws with a clear visualization." },
-    { label: "Wave interference", prompt: "Explain wave interference with an animation." },
+    { label: "SHM spring", prompt: "Teach simple harmonic motion with a spring and mass." },
+    { label: "Inclined plane", prompt: "Show a block on an inclined plane." },
     { label: "Orbital mechanics", prompt: "Show how planets orbit under gravity." },
-    { label: "Electric fields", prompt: "Visualize electric fields around charges." },
+    { label: "Newton's laws", prompt: "Teach Newton's three laws with a clear visualization." },
   ],
 };

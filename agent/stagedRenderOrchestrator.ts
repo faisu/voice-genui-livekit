@@ -1,19 +1,10 @@
 import type { Room } from "@livekit/rtc-node";
 import { log } from "@livekit/agents";
-import {
-  prepareCanvasContent,
-} from "../lib/sanitize.js";
-import {
-  mergeSceneOps,
-  serializeSceneOpsDocument,
-  tryParseSceneOpsDocument,
-  type SceneOpsDocument,
-} from "../lib/sceneOps.js";
 import type { RenderCanvasInput } from "../lib/types.js";
 import { runCanvasRenderJob } from "./canvasRenderWorker.js";
 import {
   clearStagedLesson,
-  setAccumulatedSceneOps,
+  getCanvasState,
   waitForStageReady,
 } from "./session.js";
 import {
@@ -44,7 +35,7 @@ export type StagedRenderResult = {
   title?: string;
   lesson_id: string;
   stages_completed: number;
-  content_type: "scene_ops" | "threejs";
+  content_type: "scene_ops";
   content_length: number;
 };
 
@@ -56,8 +47,9 @@ export type StageNarrateHook = (args: {
 }) => Promise<void>;
 
 /**
- * Sequentially generate and publish scene stages for early first paint,
- * waiting for client stage_ready (with timeout) between stages.
+ * Sequentially generate and publish complete scene_ops artifacts per stage
+ * for early first paint, waiting for client stage_ready (with timeout).
+ * Unused by the active voice path; kept for future progressive lessons.
  */
 export async function runStagedCanvasRender(options: {
   room: Room;
@@ -74,11 +66,8 @@ export async function runStagedCanvasRender(options: {
   const title = request.title ?? "Interactive demo";
 
   clearStagedLesson(roomName);
-  setAccumulatedSceneOps(roomName, lessonId, null);
 
-  let accumulated: SceneOpsDocument | null = null;
   let lastContentLength = 0;
-  let usedContentType: "scene_ops" | "threejs" = "scene_ops";
   let stagesCompleted = 0;
 
   for (let i = 0; i < stages.length; i++) {
@@ -97,120 +86,42 @@ export async function runStagedCanvasRender(options: {
           mode: isFirst ? "replace" : "patch",
           content_type: "scene_ops",
           title,
-          lesson_id: lessonId,
-          stage_id: stage.id,
-          stage_index: i,
-          total_stages: total,
         },
         "",
       ),
     );
 
-    let stageDoc: SceneOpsDocument | null = null;
-    let stageContentType: "scene_ops" | "threejs" = "scene_ops";
-    let stageContent = "";
-
-    try {
-      const result = await runCanvasRenderJob({
-        room,
-        roomName,
-        request: {
-          mode: isFirst ? "replace" : "patch",
-          content_type: "scene_ops",
-          visual_brief: buildStageBrief({
-            title,
-            stage,
-            stageIndex: i,
-            totalStages: total,
-            isFinal,
-            priorOps: accumulated,
-          }),
+    const result = await runCanvasRenderJob({
+      room,
+      roomName,
+      request: {
+        mode: isFirst ? "replace" : "patch",
+        content_type: "scene_ops",
+        visual_brief: buildStageBrief({
           title,
-          lesson_id: lessonId,
-          stage_id: stage.id,
-          stage_index: i,
-          total_stages: total,
-        },
-        abortSignal,
-        publishComplete: false,
-        preferSceneOps: true,
-        maxOutputTokens: 2200,
-      });
-
-      stageContent = result.content;
-      stageContentType = result.content_type;
-      const parsed = tryParseSceneOpsDocument(result.content);
-      if (parsed) {
-        stageDoc = parsed;
-      } else if (result.content_type === "scene_ops") {
-        logger().warn(
-          {
-            stageId: stage.id,
-            preview: result.content.slice(0, 400),
-            length: result.content.length,
-          },
-          "scene_ops failed schema coerce",
-        );
-        throw new Error("Invalid scene_ops from render worker");
-      }
-    } catch (error) {
-      logger().warn(
-        { error, stageId: stage.id },
-        "scene_ops stage failed; retrying as threejs fallback",
-      );
-
-      const fallback = await runCanvasRenderJob({
-        room,
-        roomName,
-        request: {
-          mode: "replace",
-          content_type: "threejs",
-          visual_brief: [
-            `FALLBACK full Three.js scene for stage "${stage.id}" of "${title}".`,
-            stage.brief,
-            "Include everything taught so far in one self-contained scene.",
-          ].join("\n\n"),
-          title,
-          lesson_id: lessonId,
-          stage_id: stage.id,
-          stage_index: i,
-          total_stages: total,
-        },
-        abortSignal,
-        publishComplete: false,
-        preferSceneOps: false,
-        maxOutputTokens: 8192,
-      });
-
-      stageContent = fallback.content;
-      stageContentType = "threejs";
-      usedContentType = "threejs";
-      accumulated = null;
-    }
-
-    if (stageDoc) {
-      accumulated = mergeSceneOps(accumulated, stageDoc);
-      setAccumulatedSceneOps(roomName, lessonId, accumulated);
-      stageContent = serializeSceneOpsDocument(stageDoc);
-      stageContentType = "scene_ops";
-      usedContentType = "scene_ops";
-    }
-
-    const prepared = prepareCanvasContent(stageContent, stageContentType);
-    lastContentLength = prepared.length;
+          stage,
+          stageIndex: i,
+          totalStages: total,
+          isFinal,
+        }),
+        title,
+      },
+      abortSignal,
+      publishComplete: false,
+      maxOutputTokens: 3200,
+    });
 
     const input: RenderCanvasInput = {
       mode: isFirst ? "replace" : "patch",
-      content_type: stageContentType,
-      content: prepared,
+      content_type: "scene_ops",
+      content: result.content,
       title,
-      lesson_id: lessonId,
-      stage_id: stage.id,
-      stage_index: i,
-      total_stages: total,
     };
 
     await publishToolCallComplete(room, roomName, input);
+
+    const published = getCanvasState(roomName)?.content ?? result.content;
+    lastContentLength = published.length;
 
     const ready = await waitForStageReady(
       roomName,
@@ -229,22 +140,18 @@ export async function runStagedCanvasRender(options: {
     }
 
     stagesCompleted += 1;
-
-    // threejs fallback replaces the whole viewport — stop further stages.
-    if (stageContentType === "threejs") {
-      logger().info(
-        { stageId: stage.id },
-        "Stopping staged loop after threejs fallback",
-      );
-      break;
-    }
   }
+
+  logger().info(
+    { lessonId, stagesCompleted, contentLength: lastContentLength },
+    "Staged Recipe Skill or scene_ops artifact render complete",
+  );
 
   return {
     title,
     lesson_id: lessonId,
     stages_completed: stagesCompleted,
-    content_type: usedContentType,
+    content_type: "scene_ops",
     content_length: lastContentLength,
   };
 }
@@ -255,36 +162,31 @@ function buildStageBrief(options: {
   stageIndex: number;
   totalStages: number;
   isFinal: boolean;
-  priorOps: SceneOpsDocument | null;
 }): string {
   const parts = [
     `Lesson title: ${options.title}`,
     `Stage ${options.stageIndex + 1} of ${options.totalStages} (id: ${options.stage.id}).`,
     `Pedagogical goal for this stage: ${options.stage.brief}`,
     `Spoken cue the teacher will use after this stage appears: "${options.stage.narrate}"`,
+    "Emit a COMPLETE Recipe Skill or scene_ops for this stage (no HTML/SVG).",
   ];
 
   if (options.stageIndex === 0) {
     parts.push(
-      "This is STAGE 1: emit ensureLab + the core object(s) + focusCamera (duration 0 or ≤1). Keep it minimal — no vectors/motion yet unless essential to the core object.",
+      "This is STAGE 1: show the core diagram only (title + main object(s) + essential labels). Keep it minimal.",
     );
   } else {
     parts.push(
-      "This is an ADDITIVE stage: emit ONLY new ops. Do not repeat ensureLab or recreate existing objects.",
+      "This is a PROGRESSIVE stage: start from the prior Recipe Skill or scene_ops (provided in context when available) and ADD the new teaching elements. Emit the FULL updated Recipe Skill or scene_ops.",
     );
-    if (options.priorOps) {
-      parts.push(
-        `Existing ops already on screen (do not duplicate):\n${serializeSceneOpsDocument(options.priorOps)}`,
-      );
-    }
   }
 
   if (options.isFinal) {
     parts.push(
-      "Final stage: add remaining teaching elements (motion, trails, overlay with controls). Optional focusCamera duration ≤4.",
+      "Final stage: add remaining teaching elements (motion, readouts, play/pause/reset + sliders).",
     );
   } else {
-    parts.push("Not the final stage — leave room for later additions.");
+    parts.push("Not the final stage — leave room for later visual additions.");
   }
 
   return parts.join("\n\n");

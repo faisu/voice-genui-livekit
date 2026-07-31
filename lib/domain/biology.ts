@@ -16,7 +16,7 @@ export const biologyDomain: DomainConfig = {
   teacherTitle: "Biology Teacher",
   tagline: "What living system should we explore?",
   description:
-    "Speak any biology concept and watch the lab viewport become an interactive 3D model or process animation with a live voice teacher.",
+    "Speak any biology concept and watch the lab viewport become an interactive Three.js diagram or process animation with a live voice teacher.",
   openingLabel: "Opening biology lab",
   captionPlaceholder:
     "Ask about cells, genetics, or ecosystems — demos fill the full lab view.",
@@ -30,11 +30,11 @@ export const biologyDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for students (middle school through early college).
 - Use accurate biological terminology but stay conversational for voice.
 - Emphasize structure-function relationships and scale (molecular → organism).
-- For concepts involving cells, processes, anatomy, or ecosystems — MUST call render_canvas with stages (2–4 progressive steps).
-- Prefer staged builds; use mode patch (visual_brief only) to zoom into structures or add labels.`,
+- For concepts involving cells, processes, anatomy, or ecosystems — MUST call render_canvas with a detailed visual_brief for one interactive Three.js demo.
+- Prefer one clear demo; use mode patch (visual_brief only) to zoom into structures or add labels.`,
     renderTriggers: "cells, organs, processes, ecosystems",
     visualBriefExtras:
-      "Specify biological structures, color coding for organelles, process steps (transcription, mitosis), and scale indicators.",
+      "Specify biological structures, color coding for organelles, process steps (transcription, mitosis), scale indicators, and interactive step controls.",
   }),
 
   agentInstructions: buildAgentInstructions("biology", "biology teacher"),
@@ -49,23 +49,18 @@ export const biologyDomain: DomainConfig = {
     accuracyNote:
       "Anatomical proportions and process sequences should be biologically plausible for the teaching level",
     sceneGuidance:
-      "Use distinct colors for organelles and tissues. Animate multi-step processes (mitosis, transcription) with clear phase labels. Include scale bars or zoom cues when switching magnification.",
+      "Use distinct materialPreset colors for organelles and tissues. Prefer orbit/oscillate for multi-step processes. Prefer clear schematic Three.js demos.",
   }),
 
   renderUserPromptPrefix:
-    "Render a FULL-VIEWPORT threejs biology teaching scene that fills the student's entire lab view.",
+    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive biology Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL lab viewport with an interactive biology demonstration. " +
-    "Prefer stages[] (2–4): id, brief (visual adds), narrate (spoken AFTER appear). " +
-    "Stage 1 = lab + core structure; later stages add labels/process steps. " +
-    "For single-shot or tiny patches, pass visual_brief instead. Never pass raw Three.js.",
+    "Replace or patch the FULL lab viewport with an interactive biology Three.js demo. " +
+    "Pass visual_brief describing the full interactive demo. A verified summary is returned when live.",
 
   visualBriefDescription:
-    "Single-shot biology lesson spec (when stages omitted): concept, structures/processes, color coding, labels, scale, camera, animation phases, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
-
-  quizConceptDescription:
-    "The biology concept being assessed (e.g. 'photosynthesis', 'DNA replication').",
+    "Biology lesson spec for Three.js lab: concept, structures/processes, color coding, labels, scale, motion phases, play/pause/reset, what to observe.",
 
   conceptSuggestions: [
     { label: "Cell structure", prompt: "Show the parts of an animal cell and what each does." },

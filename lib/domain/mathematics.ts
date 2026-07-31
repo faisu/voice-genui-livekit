@@ -16,7 +16,7 @@ export const mathematicsDomain: DomainConfig = {
   teacherTitle: "Math Teacher",
   tagline: "What should we visualize?",
   description:
-    "Speak any math concept and watch the viewport become an interactive 3D graph, geometry demo, or dynamic plot with a live voice teacher.",
+    "Speak any math concept and watch the viewport become an interactive Three.js graph, geometry demo, or dynamic plot with a live voice teacher.",
   openingLabel: "Opening math studio",
   captionPlaceholder:
     "Ask about functions, geometry, or calculus — visualizations fill the full view.",
@@ -30,11 +30,11 @@ export const mathematicsDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for students (middle school through early college).
 - Connect symbols to visual intuition before heavy algebra.
 - Use precise mathematical language but stay conversational for voice.
-- For concepts involving graphs, geometry, transformations, or rates of change — MUST call render_canvas with stages (2–4 progressive steps).
-- Prefer staged builds; use mode patch (visual_brief only) to refine parameters.`,
+- For concepts involving graphs, geometry, transformations, or rates of change — MUST call render_canvas with a detailed visual_brief for one interactive Three.js demo.
+- Prefer one clear demo; use mode patch (visual_brief only) to refine parameters.`,
     renderTriggers: "graphs, geometry, transformations, calculus",
     visualBriefExtras:
-      "Specify axes ranges, function expressions, key points, tangent lines, areas under curves, and geometric constructions.",
+      "Specify axes ranges, function expressions, key points, tangent lines, areas under curves, geometric constructions, and interactive parameter sliders.",
   }),
 
   agentInstructions: buildAgentInstructions("mathematics", "math teacher"),
@@ -49,30 +49,25 @@ export const mathematicsDomain: DomainConfig = {
     accuracyNote:
       "Plots and geometric constructions must be mathematically correct for the stated parameters",
     sceneGuidance:
-      "Draw clear axes with labels. Use distinct colors for curves, tangents, and regions. Animate parameter changes smoothly. Include readouts for key values (slope, area, angle).",
+      "Use line/box primitives for axes and markers. Prefer oscillate for animated plots. Bind key values to overlay sliders/readouts. Prefer clear 3D constructions via scene_ops.",
   }),
 
   renderUserPromptPrefix:
-    "Render a FULL-VIEWPORT threejs mathematics teaching scene that fills the student's entire view.",
+    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive mathematics Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL viewport with an interactive math visualization. " +
-    "Prefer stages[] (2–4): id, brief (visual adds), narrate (spoken AFTER appear). " +
-    "Stage 1 = axes/core figure; later stages add overlays, sweeps, labels. " +
-    "For single-shot or tiny patches, pass visual_brief instead. Never pass raw Three.js.",
+    "Replace or patch the FULL viewport with an interactive math Three.js visualization. " +
+    "Pass visual_brief describing the full interactive demo. A verified summary is returned when live.",
 
   visualBriefDescription:
-    "Single-shot math lesson spec (when stages omitted): concept, functions/geometry, axes ranges, parameters, labels, colors, camera, animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
-
-  quizConceptDescription:
-    "The math concept being assessed (e.g. 'derivative as slope', 'Pythagorean theorem').",
+    "Math lesson spec for Three.js lab: concept, functions/geometry, axes ranges, parameters, labels, colors, motion, play/pause/reset + sliders, what to observe.",
 
   conceptSuggestions: [
     { label: "Sine & cosine", prompt: "Show how sine and cosine relate on the unit circle." },
     { label: "Parabola", prompt: "Visualize how changing a, b, c affects a parabola." },
     { label: "Derivative", prompt: "Explain the derivative as a tangent slope with a live graph." },
     { label: "Pythagorean theorem", prompt: "Prove the Pythagorean theorem with a visual demo." },
-    { label: "3D surfaces", prompt: "Plot a 3D surface like z = x² + y² and explain its shape." },
-    { label: "Vector addition", prompt: "Show vector addition and the parallelogram rule in 3D." },
+    { label: "Contour plots", prompt: "Show a contour plot for z = x² + y² and explain level sets." },
+    { label: "Vector addition", prompt: "Show vector addition and the parallelogram rule." },
   ],
 };

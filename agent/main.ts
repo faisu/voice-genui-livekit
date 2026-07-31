@@ -13,8 +13,6 @@ import { fileURLToPath } from "node:url";
 import {
   CANVAS_DATA_TOPIC,
   type CanvasEventMessage,
-  type QuizAnswer,
-  type QuizState,
 } from "../lib/types.js";
 import { resolveLlmModel, resolveLlmProvider } from "../lib/ai/index.js";
 import { resolveDomain } from "../lib/domain/index.js";
@@ -28,7 +26,6 @@ import {
 import {
   clearRoomSession,
   getLearnerProfile,
-  getQuizState,
   hasGreeted,
   markGreeted,
   resolveStageReady,
@@ -260,26 +257,6 @@ export default defineAgent<AgentProcessUserData>({
           return;
         }
 
-        if (message.type === "quiz_answer") {
-          logger.info(
-            { quizId: message.quizId, answers: message.answers },
-            "Received quiz answer",
-          );
-
-          const quiz = getQuizState(roomName);
-          const summary = buildQuizResultSummary(
-            quiz,
-            message.quizId,
-            message.answers,
-          );
-
-          void runUserReply({
-            userInput: summary,
-            inputModality: "text",
-          });
-          return;
-        }
-
         if (message.type === "stage_ready") {
           logger.info(
             {
@@ -355,49 +332,6 @@ function isSilentCanvasControl(payload: unknown): boolean {
   const action = (payload as { action?: unknown }).action;
   if (typeof action !== "string") return false;
   return SILENT_CANVAS_ACTIONS.has(action.toLowerCase());
-}
-
-function buildQuizResultSummary(
-  quiz: QuizState | null,
-  quizId: string,
-  answers: QuizAnswer[],
-): string {
-  if (!quiz || quiz.quizId !== quizId) {
-    return "[The student submitted quiz answers, but the quiz is no longer available. Briefly acknowledge and offer to continue.]";
-  }
-
-  const answerByQuestion = new Map(
-    answers.map((answer) => [answer.questionId, answer.selectedOptionId]),
-  );
-
-  let correct = 0;
-  const lines = quiz.questions.map((question, index) => {
-    const selectedId = answerByQuestion.get(question.id);
-    const selected = question.options.find((option) => option.id === selectedId);
-    const correctOption = question.options.find(
-      (option) => option.id === question.correctOptionId,
-    );
-    const isCorrect = selectedId === question.correctOptionId;
-    if (isCorrect) correct += 1;
-
-    return [
-      `Q${index + 1}: ${question.prompt}`,
-      `  Student answered: ${selected ? selected.text : "(no answer)"}`,
-      `  Correct answer: ${correctOption?.text ?? "(unknown)"}`,
-      `  Result: ${isCorrect ? "CORRECT" : "INCORRECT"}`,
-    ].join("\n");
-  });
-
-  const total = quiz.questions.length;
-
-  return [
-    `[The student submitted the quiz on "${quiz.concept}" and scored ${correct}/${total}.`,
-    "Give brief spoken feedback: praise what they got right, and for anything wrong, gently correct the misconception and re-explain that specific idea in one or two sentences.",
-    "If they missed something, offer to render_canvas a demo or a follow-up render_quiz. Keep it encouraging and concise.]",
-    "",
-    "Detailed results:",
-    ...lines,
-  ].join("\n");
 }
 
 cli.runApp(

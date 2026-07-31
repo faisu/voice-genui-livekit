@@ -1,5 +1,6 @@
-import type { CanvasState, LearnerProfile, QuizState } from "../lib/types.js";
+import type { CanvasState, LearnerProfile } from "../lib/types.js";
 import type { SceneOpsDocument } from "../lib/sceneOps.js";
+import type { DemoSummary } from "../lib/recipes/types.js";
 
 const sessions = new Map<string, RoomSession>();
 
@@ -13,12 +14,13 @@ type StageReadyWaiter = {
 export type RoomSession = {
   roomName: string;
   currentCanvasState: CanvasState | null;
-  currentQuiz: QuizState | null;
+  /** Last applied scene ops (agent-internal; used for patch context). */
+  accumulatedSceneOps: SceneOpsDocument | null;
+  lastSkillId: string | null;
+  lastDemoSummary: DemoSummary | null;
   learnerProfile: LearnerProfile | null;
   /** True once the personalized greeting has been issued. */
   greeted: boolean;
-  /** Accumulated scene ops for the active staged lesson. */
-  accumulatedSceneOps: SceneOpsDocument | null;
   activeLessonId: string | null;
   stageReadyWaiters: StageReadyWaiter[];
 };
@@ -29,10 +31,11 @@ export function getRoomSession(roomName: string): RoomSession {
     session = {
       roomName,
       currentCanvasState: null,
-      currentQuiz: null,
+      accumulatedSceneOps: null,
+      lastSkillId: null,
+      lastDemoSummary: null,
       learnerProfile: null,
       greeted: false,
-      accumulatedSceneOps: null,
       activeLessonId: null,
       stageReadyWaiters: [],
     };
@@ -50,13 +53,23 @@ export function getCanvasState(roomName: string): CanvasState | null {
   return getRoomSession(roomName).currentCanvasState ?? null;
 }
 
-export function setQuizState(roomName: string, state: QuizState): void {
-  const session = getRoomSession(roomName);
-  session.currentQuiz = state;
+export function setLastSkillId(roomName: string, skillId: string | null): void {
+  getRoomSession(roomName).lastSkillId = skillId;
 }
 
-export function getQuizState(roomName: string): QuizState | null {
-  return getRoomSession(roomName).currentQuiz ?? null;
+export function getLastSkillId(roomName: string): string | null {
+  return getRoomSession(roomName).lastSkillId;
+}
+
+export function setDemoSummary(
+  roomName: string,
+  summary: DemoSummary | null,
+): void {
+  getRoomSession(roomName).lastDemoSummary = summary;
+}
+
+export function getDemoSummary(roomName: string): DemoSummary | null {
+  return getRoomSession(roomName).lastDemoSummary;
 }
 
 export function setLearnerProfile(
@@ -121,23 +134,14 @@ export function waitForStageReady(
   timeoutMs = 2500,
 ): Promise<{ timedOut: boolean }> {
   const session = getRoomSession(roomName);
-
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      const idx = session.stageReadyWaiters.findIndex((w) => w.timer === timer);
-      if (idx >= 0) session.stageReadyWaiters.splice(idx, 1);
+      session.stageReadyWaiters = session.stageReadyWaiters.filter(
+        (w) => w.timer !== timer,
+      );
       resolve({ timedOut: true });
     }, timeoutMs);
-
-    session.stageReadyWaiters.push({
-      lessonId,
-      stageId,
-      resolve: (result) => {
-        clearTimeout(timer);
-        resolve(result);
-      },
-      timer,
-    });
+    session.stageReadyWaiters.push({ lessonId, stageId, resolve, timer });
   });
 }
 
@@ -150,7 +154,7 @@ export function resolveStageReady(
   const idx = session.stageReadyWaiters.findIndex(
     (w) => w.lessonId === lessonId && w.stageId === stageId,
   );
-  if (idx < 0) return false;
+  if (idx === -1) return false;
   const [waiter] = session.stageReadyWaiters.splice(idx, 1);
   if (!waiter) return false;
   clearTimeout(waiter.timer);
@@ -160,11 +164,10 @@ export function resolveStageReady(
 
 export function clearRoomSession(roomName: string): void {
   const session = sessions.get(roomName);
-  if (session) {
-    for (const waiter of session.stageReadyWaiters) {
-      clearTimeout(waiter.timer);
-      waiter.resolve({ timedOut: true });
-    }
+  if (!session) return;
+  for (const waiter of session.stageReadyWaiters) {
+    clearTimeout(waiter.timer);
+    waiter.resolve({ timedOut: true });
   }
   sessions.delete(roomName);
 }

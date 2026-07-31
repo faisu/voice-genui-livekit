@@ -1,7 +1,7 @@
 import { llm } from "@livekit/agents";
 import type { Room } from "@livekit/rtc-node";
 import { z } from "zod";
-import type { AgeBand, LearnerProfile, PronounChoice } from "../../lib/types.js";
+import type { AgeBand, LearnerProfile } from "../../lib/types.js";
 import { isValidLearnerProfile } from "../../lib/learnerProfile.js";
 import { setLearnerProfile } from "../session.js";
 import { publishLearnerProfile } from "./renderCanvas.js";
@@ -14,19 +14,14 @@ const ageBandSchema = z.enum([
   "23_plus",
 ]);
 
-const pronounSchema = z.enum([
-  "he_him",
-  "she_her",
-  "they_them",
-  "prefer_not",
-]);
-
 export const saveLearnerProfileRequestSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .max(40)
+    .describe("Student's preferred first name or nickname for address."),
   age_band: ageBandSchema.describe(
-    "Student age band: under_13 | 13_15 | 16_18 | 18_22 | 23_plus",
-  ),
-  pronouns: pronounSchema.describe(
-    "How to address the student: he_him | she_her | they_them | prefer_not",
+    "Student age band mapped from their free-form reply: under_13 | 13_15 | 16_18 | 18_22 | 23_plus",
   ),
   topics: z
     .array(z.string())
@@ -47,8 +42,8 @@ export type SaveLearnerProfileRequest = z.infer<
 
 function toLearnerProfile(request: SaveLearnerProfileRequest): LearnerProfile {
   const profile: LearnerProfile = {
+    name: request.name.trim(),
     ageBand: request.age_band as AgeBand,
-    pronouns: request.pronouns as PronounChoice,
     topics: (request.topics ?? []).map((topic) => topic.trim()).filter(Boolean),
     otherTopic: request.other_topic?.trim() || undefined,
   };
@@ -65,7 +60,7 @@ export function createSaveLearnerProfileTool(
 ) {
   return llm.tool({
     description:
-      "Save the student's learner profile after collecting age band and pronouns " +
+      "Save the student's learner profile after collecting their name and age " +
       "(and optional topics) by voice. Call once when onboarding answers are clear. " +
       "Do not ask them to use on-screen forms or buttons.",
     parameters: saveLearnerProfileRequestSchema,
@@ -78,12 +73,13 @@ export function createSaveLearnerProfileTool(
 
       return JSON.stringify({
         status: "profile_saved",
+        name: profile.name,
         age_band: profile.ageBand,
-        pronouns: profile.pronouns,
         topics: profile.topics,
         message:
-          "Profile saved. Briefly confirm you're ready, then invite them to speak any " +
-          "concept for a full-viewport demo. Do not re-ask age or pronouns.",
+          `Profile saved. Briefly greet ${profile.name} by name, confirm you're ready, ` +
+          "then invite them to speak any concept for a full-viewport demo. " +
+          "Match explanation depth to their age band from now on. Do not re-ask name or age.",
       });
     },
   });

@@ -1,5 +1,4 @@
 export { createRenderCanvasTool } from "./renderCanvasTool.js";
-export { createRenderQuizTool } from "./renderQuizTool.js";
 export { createSaveLearnerProfileTool } from "./saveLearnerProfileTool.js";
 export {
   publishAssistantText,
@@ -8,5 +7,4 @@ export {
   publishToolCallDelta,
   publishToolCallComplete,
   publishUserTranscript,
-  publishQuizRender,
 } from "./renderCanvas.js";

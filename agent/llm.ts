@@ -125,6 +125,14 @@ class AgentLLMStream extends LLMStream {
 
     if (messages.length === 0) {
       messages.push({ role: "user", content: "Hello" });
+    } else {
+      // Anthropic rejects assistant prefill: history must end with a user (or tool) turn.
+      // Filler speech during long tools can leave a trailing assistant message.
+      // convertChatContextToModelMessages already synthesizes missing tool results.
+      const last = messages[messages.length - 1]!;
+      if (last.role === "assistant") {
+        messages.push({ role: "user", content: "Please continue." });
+      }
     }
 
     const tools = this.toolCtx ? buildAiToolSet(this.toolCtx) : undefined;

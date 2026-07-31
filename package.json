@@ -11,7 +11,8 @@
     "start:agent": "tsx agent/main.ts start",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke:recipes": "tsx scripts/smokeRecipes.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

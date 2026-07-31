@@ -16,7 +16,7 @@ export const chemistryDomain: DomainConfig = {
   teacherTitle: "Chemistry Teacher",
   tagline: "What reaction should we explore?",
   description:
-    "Speak any chemistry concept and watch the lab viewport become an interactive molecular or reaction demo with a live voice teacher.",
+    "Speak any chemistry concept and watch the lab viewport become an interactive Three.js molecular or reaction diagram with a live voice teacher.",
   openingLabel: "Opening chemistry lab",
   captionPlaceholder:
     "Ask about bonds, reactions, or molecules — demos fill the full lab view.",
@@ -30,11 +30,11 @@ export const chemistryDomain: DomainConfig = {
     teachingStyle: `- Explain concepts clearly for students (high school through early college).
 - Use accurate chemical language but stay conversational for voice.
 - Build intuition with particle-level visuals before formal notation.
-- For concepts involving structure, bonding, reactions, or energy — MUST call render_canvas with stages (2–4 progressive steps).
-- Prefer staged builds; use mode patch (visual_brief only) to refine the current scene.`,
+- For concepts involving structure, bonding, reactions, or energy — MUST call render_canvas with a detailed visual_brief for one interactive Three.js demo.
+- Prefer one clear demo; use mode patch (visual_brief only) to refine the current scene.`,
     renderTriggers: "molecules, bonds, reactions, energy",
     visualBriefExtras:
-      "Specify atom colors (CPK-style), bond types, electron movement, energy diagrams, and reaction progress when relevant.",
+      "Specify atom colors (CPK-style), bond types, electron movement, energy diagrams, reaction progress, and interactive controls when relevant.",
   }),
 
   agentInstructions: buildAgentInstructions("chemistry", "chemistry teacher"),
@@ -49,23 +49,18 @@ export const chemistryDomain: DomainConfig = {
     accuracyNote:
       "Represent molecular geometry and reaction energetics plausibly; use consistent atom colors and bond conventions",
     sceneGuidance:
-      "Use spheres for atoms with CPK-like colors, cylinders or lines for bonds. Animate electron transfer or bond breaking/forming when teaching reactions. Label key species and energy states.",
+      "Use spheres for atoms (CPK materialPreset: cpkCarbon/cpkOxygen/…) and cylinders/lines for bonds. Prefer orbit/oscillate motions. Prefer clear ball-and-stick Three.js demos.",
   }),
 
   renderUserPromptPrefix:
-    "Render a FULL-VIEWPORT threejs chemistry teaching scene that fills the student's entire lab view.",
+    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive chemistry Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL lab viewport with an interactive chemistry demonstration. " +
-    "Prefer stages[] (2–4): id, brief (visual adds), narrate (spoken AFTER appear). " +
-    "Stage 1 = lab + core structure; later stages add bonds/energy/labels. " +
-    "For single-shot or tiny patches, pass visual_brief instead. Never pass raw Three.js.",
+    "Replace or patch the FULL lab viewport with an interactive chemistry Three.js demo. " +
+    "Pass visual_brief describing the full interactive demo. A verified summary is returned when live.",
 
   visualBriefDescription:
-    "Single-shot chemistry lesson spec (when stages omitted): concept, molecular/reaction setup, atom colors, bonds, energy, labels, camera, animation, play/pause/reset, what to observe. Prefer stages[] for new lessons.",
-
-  quizConceptDescription:
-    "The chemistry concept being assessed (e.g. 'covalent bonding', 'Le Chatelier's principle').",
+    "Chemistry lesson spec for Three.js lab: concept, molecular/reaction setup, atom colors, bonds, energy, labels, motion, play/pause/reset, what to observe.",
 
   conceptSuggestions: [
     { label: "Water molecule", prompt: "Show the structure and polarity of a water molecule." },

@@ -38,7 +38,7 @@ export type DomainConfig = {
   /** Template when render may already be covered (use {callIds}) */
   renderMaybeCoveredTemplate: string;
 
-  /** System prompt for the Three.js render worker */
+  /** System prompt for the Recipe / scene_ops render worker */
   renderSystemPrompt: string;
   /** Prefix for the render worker user prompt */
   renderUserPromptPrefix: string;
@@ -46,8 +46,6 @@ export type DomainConfig = {
   renderCanvasToolDescription: string;
   /** Zod describe text for visual_brief */
   visualBriefDescription: string;
-  /** Zod describe text for quiz concept field */
-  quizConceptDescription: string;
 
   /** Starter prompts shown before the first demo */
   conceptSuggestions: ConceptSuggestion[];

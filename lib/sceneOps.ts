@@ -11,13 +11,23 @@ const ensureLabSchema = z.object({
 const addObjectSchema = z.object({
   op: z.literal("addObject"),
   id: z.string().min(1),
-  kind: z.enum(["sphere", "box", "plane", "cylinder", "line"]),
+  kind: z.enum([
+    "sphere",
+    "box",
+    "plane",
+    "cylinder",
+    "cone",
+    "torus",
+    "line",
+  ]),
   position: vec3Schema.optional(),
   rotation: vec3Schema.optional(),
   scale: vec3Schema.optional(),
   size: z.number().positive().optional(),
   color: z.number().optional(),
   opacity: z.number().min(0).max(1).optional(),
+  /** In-app material preset id (see lib/recipes/materials). */
+  materialPreset: z.string().max(64).optional(),
   /** For kind "line": start and end points. */
   from: vec3Schema.optional(),
   to: vec3Schema.optional(),
@@ -210,7 +220,17 @@ function coerceSceneOp(item: unknown): SceneOp | null {
         });
       case "addObject": {
         const kind = String(raw.kind ?? "sphere");
-        if (!["sphere", "box", "plane", "cylinder", "line"].includes(kind)) {
+        if (
+          ![
+            "sphere",
+            "box",
+            "plane",
+            "cylinder",
+            "cone",
+            "torus",
+            "line",
+          ].includes(kind)
+        ) {
           return null;
         }
         const { size, scale } = coerceObjectSizeAndScale(raw.size, raw.scale);
@@ -224,6 +244,10 @@ function coerceSceneOp(item: unknown): SceneOp | null {
           size,
           color: coerceColor(raw.color),
           opacity: coerceOpacity(raw.opacity),
+          materialPreset:
+            typeof raw.materialPreset === "string"
+              ? raw.materialPreset
+              : undefined,
           from: coerceVec3(raw.from),
           to: coerceVec3(raw.to),
         });
@@ -436,28 +460,27 @@ export function mergeSceneOps(
   };
 }
 
-/** Prompt fragment listing allowed ops for the render model. */
-export const SCENE_OPS_PROMPT = `Emit content_type "scene_ops" with content as a JSON string of:
+/** Prompt fragment listing allowed ops for the render model (freeform fallback). */
+export const SCENE_OPS_PROMPT = `Prefer emitting a Recipe Skill via emit_recipe: { "skillId", "paramOverrides"?, "observe"?, "title"? }.
+
+If no skill fits, emit freeform scene_ops:
 {"version":1,"ops":[...]}
 
 Allowed ops (discriminated by "op"):
-- ensureLab: { grid?, clearColor? } — call once in stage 1 to create the lab shell
-- addObject: { id, kind: sphere|box|plane|cylinder|line, position?, rotation?, scale?, size?, color?, opacity?, from?, to? }
-  size is a single NUMBER (radius/extent). For non-uniform boxes use scale:[w,h,d] (or we accept size:[w,h,d] and map it).
+- ensureLab: { grid?, clearColor? }
+- addObject: { id, kind: sphere|box|plane|cylinder|cone|torus|line, position?, rotation?, scale?, size?, color?, opacity?, materialPreset?, from?, to? }
+  Primitives only. materialPreset is an in-app preset id (metalBall, rubber, wood, sun, planet, cpkCarbon, …). Never GLTF/HDRI/URLs.
 - addArrow: { id, origin, direction, length?, color?, label? }
 - addTrail: { id, targetId, maxPoints?, color? }
 - setMotion: { id, type: static|projectile|pendulum|orbit|oscillate, origin?, velocity?, gravity?, pivot?, length?, angle?, center?, radius?, speed?, axis? }
 - setOverlay: { title, readouts?, showControls?, position?, slider?: { id, label, min, max, value, step? } }
-  Creates an IN-SCENE interactive panel (3D meshes you click/drag) — never an HTML overlay.
-- focusCamera: { position, target, duration? } — duration 0–2 mid-lesson; up to ~4 on final stage only
+- focusCamera: { position, target, duration? }
 - remove: { id }
 
 Rules:
-- Stage 1: ensureLab + core object(s) + focusCamera (snap or ≤1s). No motion yet unless essential.
-- Later stages: ONLY additive ops (new objects, arrows, trails, motion, overlay updates). Never recreate the lab.
 - Use unique string ids. Prefer cyan/amber accents on dark lab.
-- Keep ops lists short (≤12 per stage).
-- color must be a NUMBER (e.g. 0x38bdf8 or 3893239), never "#38bdf8"
-- positions/vectors must be [x,y,z] number arrays, never {"x":..}
+- Keep ops lists short (≤20).
+- color must be a NUMBER (e.g. 0x38bdf8), never "#38bdf8"
+- positions/vectors must be [x,y,z] number arrays
 - version must be number 1
-- content may be a JSON object or a JSON string of {"version":1,"ops":[...]}`;
+- NEVER reference http(s) URLs, .gltf, .glb, or .hdr assets`;

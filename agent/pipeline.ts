@@ -9,11 +9,12 @@ import type { Room } from "@livekit/rtc-node";
 import { createAgentLLM } from "./llm.js";
 import {
   getCanvasState,
+  getDemoSummary,
+  getLastSkillId,
   getLearnerProfile,
 } from "./session.js";
 import {
   createRenderCanvasTool,
-  createRenderQuizTool,
   createSaveLearnerProfileTool,
 } from "./tools/index.js";
 import { createAgentSTT } from "./stt.js";
@@ -63,7 +64,6 @@ class CanvasAgent extends voice.Agent {
       },
       tools: {
         render_canvas: createRenderCanvasTool(room, roomName),
-        render_quiz: createRenderQuizTool(room, roomName),
         save_learner_profile: createSaveLearnerProfileTool(
           room,
           roomName,
@@ -99,14 +99,24 @@ class CanvasAgent extends voice.Agent {
     }
 
     const canvasState = getCanvasState(this.roomName);
-    if (canvasState) {
+    const summary = getDemoSummary(this.roomName);
+    if (summary || canvasState) {
       parts.push(
         `current_viewport_demo:\n${JSON.stringify(
           {
-            title: canvasState.title,
-            mode: canvasState.mode,
-            content_type: canvasState.content_type,
-            content: canvasState.content,
+            title: summary?.title ?? canvasState?.title,
+            mode: canvasState?.mode,
+            content_type: canvasState?.content_type ?? "scene_ops",
+            skillId: summary?.skillId ?? getLastSkillId(this.roomName),
+            summary: summary
+              ? {
+                  observe: summary.observe,
+                  elements: summary.elements,
+                  params: summary.params,
+                  motions: summary.motions,
+                  controls: summary.controls,
+                }
+              : undefined,
           },
           null,
           2,
@@ -130,7 +140,7 @@ class CanvasAgent extends voice.Agent {
 
     const [forAgent, forCaptions] = stream.tee();
     const publisher = this.textPublisher;
-    const streamId = `lk-${Date.now()}`;
+    const streamId = `lk-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
     void (async () => {
       const reader = forCaptions.getReader();

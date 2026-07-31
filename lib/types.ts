@@ -1,36 +1,26 @@
-export const CANVAS_DATA_TOPIC = "canvas";
-
 /** Age bands used for teaching depth / vocabulary personalization. */
 export type AgeBand = "under_13" | "13_15" | "16_18" | "18_22" | "23_plus";
 
-/** Pronouns for address only — never used to change lesson content metaphors. */
-export type PronounChoice = "he_him" | "she_her" | "they_them" | "prefer_not";
-
-/** Collected once by voice after joining the lab (age, pronouns, optional topics). */
+/** Collected once by voice after joining the lab (name, age, optional topics). */
 export type LearnerProfile = {
+  /** Preferred first name or nickname for address. */
+  name: string;
   ageBand: AgeBand;
-  pronouns: PronounChoice;
   /** Topic labels the student mentioned wanting to explore. */
   topics: string[];
   otherTopic?: string;
 };
 
-/** Full Three.js source, or structured scene ops for staged building. */
-export type CanvasContentType = "threejs" | "scene_ops";
-
-export type RenderCanvasStageMeta = {
-  lesson_id?: string;
-  stage_id?: string;
-  stage_index?: number;
-  total_stages?: number;
-};
+/** Constrained Three.js scene ops JSON for host SceneBuilder. */
+export type CanvasContentType = "scene_ops";
 
 export type RenderCanvasInput = {
   mode: "replace" | "patch";
   content_type: CanvasContentType;
+  /** Stringified SceneOpsDocument. */
   content: string;
   title?: string;
-} & RenderCanvasStageMeta;
+};
 
 /** Active full-viewport demo driven by the agent. */
 export type WorldDemo = {
@@ -39,44 +29,13 @@ export type WorldDemo = {
   content_type?: CanvasContentType;
   streaming: boolean;
   updatedAt: number;
-} & RenderCanvasStageMeta;
+};
 
 export type CanvasState = RenderCanvasInput & {
   updatedAt: number;
 };
 
-/** A single selectable choice within a quiz question. */
-export type QuizOption = {
-  id: string;
-  text: string;
-};
-
-/** One multiple-choice comprehension question. */
-export type QuizQuestion = {
-  id: string;
-  prompt: string;
-  options: QuizOption[];
-  correctOptionId: string;
-  explanation?: string;
-};
-
-/** A full comprehension quiz the agent asks after teaching a concept. */
-export type QuizSpec = {
-  quizId: string;
-  concept: string;
-  title?: string;
-  questions: QuizQuestion[];
-};
-
-export type QuizState = QuizSpec & {
-  updatedAt: number;
-};
-
-/** A student's answers to a rendered quiz. */
-export type QuizAnswer = {
-  questionId: string;
-  selectedOptionId: string;
-};
+export const CANVAS_DATA_TOPIC = "canvas";
 
 /** Agent → browser (data channel, topic "canvas") */
 export type CanvasDataMessage =
@@ -98,14 +57,12 @@ export type CanvasDataMessage =
       isFinal: boolean;
     }
   | { type: "user_transcript"; text: string; isFinal: boolean }
-  | { type: "quiz_render"; quiz: QuizSpec }
   | { type: "learner_profile"; profile: LearnerProfile };
 
 /** Browser → agent (data channel, topic "canvas") */
 export type CanvasEventMessage =
   | { type: "canvas_event"; payload: unknown }
   | { type: "text_input"; text: string }
-  | { type: "quiz_answer"; quizId: string; answers: QuizAnswer[] }
   | { type: "student_profile"; profile: LearnerProfile }
   | {
       type: "stage_ready";
