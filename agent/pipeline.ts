@@ -55,12 +55,6 @@ class CanvasAgent extends voice.Agent {
 
     super({
       instructions: baseInstructions,
-      toolHandling: {
-        asyncOptions: {
-          replyAtTailTemplate: domain.renderCompleteTemplate,
-          replyMaybeCoveredTemplate: domain.renderMaybeCoveredTemplate,
-        },
-      },
       tools: {
         render_canvas: createRenderCanvasTool(room, roomName),
         save_learner_profile: createSaveLearnerProfileTool(

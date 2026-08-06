@@ -1,13 +1,10 @@
 import {
   buildAgentInstructions,
   buildGreetingInstructions,
-  buildRenderCompleteTemplates,
   buildRenderSystemPrompt,
   buildSystemPrompt,
 } from "./shared";
 import type { DomainConfig } from "./types";
-
-const renderTemplates = buildRenderCompleteTemplates("chemistry");
 
 export const chemistryDomain: DomainConfig = {
   id: "chemistry",
@@ -42,7 +39,6 @@ export const chemistryDomain: DomainConfig = {
     teacherRole: "chemistry teacher",
     subjectExamples: "chemistry topic",
   }),
-  ...renderTemplates,
 
   renderSystemPrompt: buildRenderSystemPrompt({
     subject: "chemistry",

@@ -1,13 +1,10 @@
 import {
   buildAgentInstructions,
   buildGreetingInstructions,
-  buildRenderCompleteTemplates,
   buildRenderSystemPrompt,
   buildSystemPrompt,
 } from "./shared";
 import type { DomainConfig } from "./types";
-
-const renderTemplates = buildRenderCompleteTemplates("programming");
 
 export const programmingDomain: DomainConfig = {
   id: "programming",
@@ -42,7 +39,6 @@ export const programmingDomain: DomainConfig = {
     teacherRole: "programming mentor",
     subjectExamples: "programming concept",
   }),
-  ...renderTemplates,
 
   renderSystemPrompt: buildRenderSystemPrompt({
     subject: "programming",

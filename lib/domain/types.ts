@@ -33,10 +33,6 @@ export type DomainConfig = {
   agentInstructions: string;
   /** First-turn greeting instructions */
   greetingInstructions: string;
-  /** Template when async render completes (use {callIds}) */
-  renderCompleteTemplate: string;
-  /** Template when render may already be covered (use {callIds}) */
-  renderMaybeCoveredTemplate: string;
 
   /** System prompt for the scene_ops render worker */
   renderSystemPrompt: string;

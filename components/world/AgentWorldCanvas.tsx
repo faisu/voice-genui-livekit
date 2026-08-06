@@ -35,8 +35,7 @@ export function AgentWorldCanvas({
       notifyHost: (payload) => onEventRef.current(payload),
     });
     builderRef.current = builder;
-    // Always show a live lab shell (grid + ground) while waiting for demos.
-    builder.bootstrapIdle();
+    // Blank until the model emits scene_ops (which includes ensureLab).
     // Re-apply after Strict Mode remount — apply effect may not re-fire.
     if (pendingDocRef.current) {
       builder.apply(pendingDocRef.current, "replace");

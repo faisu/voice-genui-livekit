@@ -52,15 +52,6 @@ export function createRenderCanvasTool(room: Room, roomName: string) {
         });
       }
 
-      await ctx.update(
-        JSON.stringify({
-          status: "rendering",
-          job_id: ctx.functionCall.callId,
-          title: input.title ?? null,
-          message: `Full-viewport ${domain.subject.toLowerCase()} demo queued. Stay silent while it builds — teach only after you receive the verified DemoSummary.`,
-        }),
-      );
-
       await publishToolCallDelta(
         room,
         buildStreamingPartialJson(
@@ -96,10 +87,9 @@ export function createRenderCanvasTool(room: Room, roomName: string) {
           summary: result.summary,
           message:
             `The demo "${result.summary.title}" is now live. ` +
-            `ONLY describe what is in summary (elements, params, observe). ` +
-            `Observation cue: ${result.summary.observe} ` +
-            `Invite them to try the interactive controls listed in summary.controls. ` +
-            `To improve the illustration, call render_canvas again with mode patch or replace and an updated visual_brief.`,
+            `Speak 1–2 short sentences using ONLY summary (elements, params, observe). ` +
+            `Cue: ${result.summary.observe} ` +
+            `Optionally invite one control from summary.controls. Do not lecture.`,
         });
       } catch (error) {
         const message =

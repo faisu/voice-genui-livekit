@@ -94,12 +94,6 @@ export class SceneBuilder {
     return this.disposed;
   }
 
-  /** Boot an empty lab shell so the viewport is live before the first demo. */
-  bootstrapIdle(): void {
-    if (this.disposed) return;
-    this.ensureLab(true, 0x050508);
-  }
-
   /** Replace mode: clear demo objects and re-apply. */
   apply(doc: SceneOpsDocument, mode: "replace" | "patch" = "replace"): void {
     if (this.disposed) return;
