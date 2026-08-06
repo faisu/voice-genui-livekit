@@ -176,7 +176,8 @@ function VoiceGenUIApp({
 
       if (
         payload.type === "tool_call_delta" ||
-        payload.type === "tool_call_complete"
+        payload.type === "tool_call_complete" ||
+        payload.type === "tool_call_error"
       ) {
         applyCanvasPayload(payload);
         return;

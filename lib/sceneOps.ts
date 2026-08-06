@@ -219,7 +219,7 @@ function coerceSceneOp(item: unknown): SceneOp | null {
           clearColor: coerceColor(raw.clearColor),
         });
       case "addObject": {
-        const kind = String(raw.kind ?? "sphere");
+        const kind = String(raw.kind ?? raw.shape ?? raw.type ?? "sphere");
         if (
           ![
             "sphere",
@@ -234,6 +234,12 @@ function coerceSceneOp(item: unknown): SceneOp | null {
           return null;
         }
         const { size, scale } = coerceObjectSizeAndScale(raw.size, raw.scale);
+        const materialPreset =
+          typeof raw.materialPreset === "string"
+            ? raw.materialPreset
+            : typeof raw.material === "string"
+              ? raw.material
+              : undefined;
         return sceneOpSchema.parse({
           op: "addObject",
           id: String(raw.id ?? `obj_${Math.random().toString(36).slice(2, 8)}`),
@@ -244,10 +250,7 @@ function coerceSceneOp(item: unknown): SceneOp | null {
           size,
           color: coerceColor(raw.color),
           opacity: coerceOpacity(raw.opacity),
-          materialPreset:
-            typeof raw.materialPreset === "string"
-              ? raw.materialPreset
-              : undefined,
+          materialPreset,
           from: coerceVec3(raw.from),
           to: coerceVec3(raw.to),
         });
@@ -296,7 +299,12 @@ function coerceSceneOp(item: unknown): SceneOp | null {
       case "setOverlay":
         return sceneOpSchema.parse({
           op: "setOverlay",
-          title: String(raw.title ?? "Demo"),
+          title: String(
+            raw.title ??
+              (typeof raw.text === "string" ? raw.text : undefined) ??
+              (typeof raw.label === "string" ? raw.label : undefined) ??
+              "Demo",
+          ),
           readouts: Array.isArray(raw.readouts)
             ? raw.readouts.map(String).slice(0, 4)
             : undefined,

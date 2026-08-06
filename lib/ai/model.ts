@@ -93,6 +93,30 @@ function resolveQwenBaseUrl(): string {
   );
 }
 
+/**
+ * DashScope Qwen enables thinking by default. In thinking mode, tool_choice
+ * cannot be "required" or a specific function — canvas/voice tool calls 400.
+ * Inject enable_thinking:false on chat/completions requests.
+ */
+function createQwenFetch(): typeof fetch {
+  return async (input, init) => {
+    let nextInit = init;
+    const body = init?.body;
+    if (typeof body === "string") {
+      try {
+        const parsed = JSON.parse(body) as Record<string, unknown>;
+        if (parsed.enable_thinking === undefined) {
+          parsed.enable_thinking = false;
+        }
+        nextInit = { ...init, body: JSON.stringify(parsed) };
+      } catch {
+        // leave body unchanged
+      }
+    }
+    return fetch(input, nextInit);
+  };
+}
+
 export function getLanguageModel(
   kind: LlmModelKind = "chat",
   modelId?: string,
@@ -107,6 +131,7 @@ export function getLanguageModel(
         apiKey: resolveQwenApiKey(),
         baseURL: resolveQwenBaseUrl(),
         name: "qwen",
+        fetch: createQwenFetch(),
       });
       return qwen.chat(resolvedModelId);
     }
@@ -136,7 +161,6 @@ export function getLanguageModel(
 export function getRenderProviderOptions():
   | { anthropic: { effort: "low" } }
   | { kimi: { reasoningEffort: "low" } }
-  | { qwen: { reasoningEffort: "low" } }
   | undefined {
   const provider = resolveLlmProvider();
   if (provider === "anthropic") {
@@ -146,9 +170,7 @@ export function getRenderProviderOptions():
   if (provider === "kimi") {
     return { kimi: { reasoningEffort: "low" } };
   }
-  if (provider === "qwen") {
-    return { qwen: { reasoningEffort: "low" } };
-  }
+  // Qwen: thinking is disabled via createQwenFetch (enable_thinking:false).
   return undefined;
 }
 

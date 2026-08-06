@@ -63,9 +63,18 @@ const emitSceneSchema = z.object({
     .optional(),
   controls: z.array(z.string()).optional(),
   ops: z
-    .unknown()
+    .object({
+      version: z.literal(1),
+      ops: z
+        .array(z.record(z.string(), z.unknown()))
+        .min(1)
+        .max(40)
+        .describe(
+          "Ordered op list. Each item must include op: ensureLab|addObject|addArrow|addTrail|setMotion|setOverlay|focusCamera|remove",
+        ),
+    })
     .describe(
-      "Complete SceneOpsDocument: { version: 1, ops: [...] } for the full lab.",
+      "Complete SceneOpsDocument. Example: { version: 1, ops: [{ op: 'ensureLab' }, { op: 'addObject', id: 'ball', kind: 'sphere', position: [0,1,0], materialPreset: 'metalBall' }] }",
     ),
 });
 
@@ -154,9 +163,10 @@ async function requestSceneFromModel(options: {
     "Starting scene_ops render job",
   );
 
-  // OpenAI-compatible gateways (qwen/kimi) often reject forced toolName choice.
+  // Qwen thinking mode rejects tool_choice required/object — we disable thinking
+  // in createQwenFetch, then force emit_scene. Kimi prefers "required".
   const toolChoice =
-    provider === "kimi" || provider === "qwen"
+    provider === "kimi"
       ? ("required" as const)
       : ({ type: "tool", toolName: "emit_scene" } as const);
 

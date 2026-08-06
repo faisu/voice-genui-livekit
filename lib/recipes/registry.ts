@@ -131,6 +131,94 @@ export function resolveSceneEmit(
   };
 }
 
+/** Best-effort convert { ensureLab: {}, sphere: {...} } maps into scene_ops. */
+function coerceKeyedOpsMap(raw: unknown): SceneOpsDocument | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const map = raw as Record<string, unknown>;
+  const ops: unknown[] = [];
+
+  if ("ensureLab" in map) {
+    const lab =
+      map.ensureLab && typeof map.ensureLab === "object"
+        ? (map.ensureLab as Record<string, unknown>)
+        : {};
+    ops.push({ op: "ensureLab", ...lab });
+  }
+
+  for (const [key, value] of Object.entries(map)) {
+    if (key === "ensureLab" || key === "version" || key === "ops") continue;
+    const entry =
+      value && typeof value === "object"
+        ? (value as Record<string, unknown>)
+        : {};
+
+    if (
+      key === "setOverlay" ||
+      entry.op === "setOverlay" ||
+      entry.type === "overlay"
+    ) {
+      ops.push({
+        op: "setOverlay",
+        title:
+          (typeof entry.title === "string" && entry.title) ||
+          (typeof entry.type === "string" && entry.type) ||
+          (typeof entry.overlay === "string" && entry.overlay) ||
+          "Lab demo",
+        showControls: entry.showControls !== false,
+        ...(entry.slider && typeof entry.slider === "object"
+          ? { slider: entry.slider }
+          : {}),
+      });
+      continue;
+    }
+
+    if (
+      key === "setMotion" ||
+      entry.op === "setMotion" ||
+      typeof entry.mode === "string" ||
+      typeof entry.motion === "string"
+    ) {
+      ops.push({
+        op: "setMotion",
+        id:
+          (typeof entry.id === "string" && entry.id) ||
+          (typeof entry.target === "string" && entry.target) ||
+          (typeof entry.name === "string" && entry.name) ||
+          "body",
+        type:
+          (typeof entry.type === "string" && entry.type) ||
+          (typeof entry.mode === "string" && entry.mode) ||
+          (typeof entry.motion === "string" && entry.motion) ||
+          "static",
+        ...entry,
+      });
+      continue;
+    }
+
+    const kind =
+      (typeof entry.kind === "string" && entry.kind) ||
+      (typeof entry.type === "string" && entry.type) ||
+      (/^(sphere|box|plane|cylinder|cone|torus|line)$/i.test(key)
+        ? key.toLowerCase()
+        : null);
+    if (kind) {
+      ops.push({
+        ...entry,
+        op: "addObject",
+        id:
+          (typeof entry.id === "string" && entry.id) ||
+          (typeof entry.name === "string" && entry.name) ||
+          key,
+        kind,
+        materialPreset: entry.materialPreset ?? entry.material,
+      });
+    }
+  }
+
+  if (ops.length === 0) return null;
+  return coerceSceneOpsDocument({ version: 1, ops });
+}
+
 export function parseEmitScene(raw: unknown): EmitScenePayload | null {
   if (raw == null) return null;
   let value: unknown = raw;
@@ -151,15 +239,33 @@ export function parseEmitScene(raw: unknown): EmitScenePayload | null {
   const title = typeof obj.title === "string" ? obj.title : undefined;
   const observe = typeof obj.observe === "string" ? obj.observe : undefined;
 
+  let opsValue: unknown = obj.ops;
+  if (typeof opsValue === "string") {
+    try {
+      opsValue = JSON.parse(opsValue);
+    } catch {
+      opsValue = undefined;
+    }
+  }
+
   let opsDoc: SceneOpsDocument | null = null;
-  if (obj.ops || obj.version === 1) {
-    opsDoc = coerceSceneOpsDocument(
-      obj.ops && !Array.isArray(obj.ops) && typeof obj.ops === "object"
-        ? obj.ops
-        : obj.ops
-          ? { version: 1, ops: obj.ops }
-          : obj,
-    );
+  if (opsValue != null || obj.version === 1) {
+    if (Array.isArray(opsValue)) {
+      opsDoc = coerceSceneOpsDocument({ version: 1, ops: opsValue });
+    } else if (opsValue && typeof opsValue === "object") {
+      const nested = opsValue as Record<string, unknown>;
+      if (Array.isArray(nested.ops) || nested.version === 1) {
+        opsDoc = coerceSceneOpsDocument(opsValue);
+      } else {
+        // Model sometimes emits a keyed map instead of { version, ops: [] }.
+        opsDoc = coerceSceneOpsDocument(opsValue);
+        if (!opsDoc) {
+          opsDoc = coerceKeyedOpsMap(opsValue);
+        }
+      }
+    } else if (obj.version === 1) {
+      opsDoc = coerceSceneOpsDocument(obj);
+    }
   }
 
   if (!opsDoc) return null;

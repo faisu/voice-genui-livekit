@@ -4,7 +4,10 @@ import { z } from "zod";
 import { resolveDomain } from "../../lib/domain/index.js";
 import { buildStreamingPartialJson } from "../../lib/partialJson.js";
 import { runCanvasRenderJob } from "../canvasRenderWorker.js";
-import { publishToolCallDelta } from "./renderCanvas.js";
+import {
+  publishToolCallDelta,
+  publishToolCallError,
+} from "./renderCanvas.js";
 
 export const renderCanvasRequestSchema = z.object({
   mode: z
@@ -101,6 +104,14 @@ export function createRenderCanvasTool(room: Room, roomName: string) {
       } catch (error) {
         const message =
           error instanceof Error ? error.message : String(error);
+        try {
+          await publishToolCallError(room, {
+            title: input.title,
+            message,
+          });
+        } catch {
+          // Client may stay in Building if this fails; still return the tool error.
+        }
         return JSON.stringify({
           status: "error",
           job_id: ctx.functionCall.callId,

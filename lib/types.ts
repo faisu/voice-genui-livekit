@@ -49,6 +49,12 @@ export type CanvasDataMessage =
       name: "render_canvas";
       input: RenderCanvasInput;
     }
+  | {
+      type: "tool_call_error";
+      name: "render_canvas";
+      title?: string;
+      message: string;
+    }
   | { type: "assistant_text"; text: string; isFinal?: boolean }
   | {
       type: "assistant_text_delta";

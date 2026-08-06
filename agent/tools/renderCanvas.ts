@@ -85,6 +85,18 @@ export async function publishToolCallDelta(
   });
 }
 
+export async function publishToolCallError(
+  room: Room,
+  options: { title?: string; message: string },
+): Promise<void> {
+  await publishCanvasMessage(room, {
+    type: "tool_call_error",
+    name: "render_canvas",
+    title: options.title,
+    message: options.message,
+  });
+}
+
 export async function publishAssistantText(
   room: Room,
   text: string,

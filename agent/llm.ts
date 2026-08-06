@@ -68,6 +68,12 @@ function toAiToolChoice(
   toolChoice: llm.ToolChoice | undefined,
 ): ToolChoice | undefined {
   if (!toolChoice) return undefined;
+  // Qwen thinking mode rejects forced tool_choice; we disable thinking in
+  // createQwenFetch, but still avoid "required" from LiveKit as a safety net.
+  const provider = resolveLlmProvider();
+  if (provider === "qwen" && toolChoice === "required") {
+    return "auto";
+  }
   if (
     toolChoice === "auto" ||
     toolChoice === "none" ||

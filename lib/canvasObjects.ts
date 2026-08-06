@@ -32,6 +32,10 @@ export function applyCanvasMessage(
     return applyCanvasComplete(acc, message.input);
   }
 
+  if (message.type === "tool_call_error" && message.name === "render_canvas") {
+    return applyCanvasError(acc, message);
+  }
+
   return acc;
 }
 
@@ -73,6 +77,29 @@ function applyCanvasComplete(
     title: input.title,
     content: input.content,
     content_type: input.content_type,
+    streaming: false,
+    updatedAt: Date.now(),
+  };
+  return acc;
+}
+
+function applyCanvasError(
+  acc: CanvasWorldAccumulator,
+  message: Extract<CanvasDataMessage, { type: "tool_call_error" }>,
+): CanvasWorldAccumulator {
+  // Clear the BUILDING chip. Keep the last successful scene content if present.
+  if (acc.demo?.content?.trim()) {
+    acc.demo = {
+      ...acc.demo,
+      streaming: false,
+      updatedAt: Date.now(),
+    };
+    return acc;
+  }
+  acc.demo = {
+    title: message.title ?? acc.demo?.title,
+    content: "",
+    content_type: "scene_ops",
     streaming: false,
     updatedAt: Date.now(),
   };
