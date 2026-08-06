@@ -10,14 +10,13 @@ import {
 } from "../lib/ai/index.js";
 import type { RenderCanvasInput } from "../lib/types.js";
 import { serializeSceneOpsDocument } from "../lib/sceneOps.js";
-import { buildStreamingPartialJson, parseEmitRecipeArgs } from "../lib/partialJson.js";
+import { buildStreamingPartialJson, parseEmitSceneArgs } from "../lib/partialJson.js";
 import { resolveDomain } from "../lib/domain/index.js";
 import {
   getAccumulatedSceneOps,
   getLearnerProfile,
   setAccumulatedSceneOps,
   setDemoSummary,
-  setLastSkillId,
 } from "./session.js";
 import {
   publishToolCallComplete,
@@ -26,30 +25,48 @@ import {
 import type { RenderCanvasRequest } from "./tools/renderCanvasTool.js";
 import { AGE_BAND_OPTIONS } from "../lib/learnerProfile.js";
 import {
-  parseEmitRecipe,
-  resolveRecipeEmit,
-  skillCatalogPrompt,
+  parseEmitScene,
+  resolveSceneEmit,
   type DemoSummary,
 } from "../lib/recipes/index.js";
 
 const DELTA_THROTTLE_MS = 2500;
-const DEFAULT_MAX_OUTPUT_TOKENS = 1800;
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 
-const emitRecipeSchema = z.object({
-  skillId: z
-    .string()
-    .optional()
-    .describe("Preferred: registered recipe skill id (e.g. projectile)."),
-  paramOverrides: z
-    .record(z.string(), z.number())
-    .optional()
-    .describe("Optional numeric param overrides for the skill."),
-  observe: z.string().max(280).optional(),
+const emitSceneSchema = z.object({
   title: z.string().max(120).optional(),
+  observe: z
+    .string()
+    .max(280)
+    .optional()
+    .describe("One short observation cue for the student."),
+  elements: z
+    .array(
+      z.object({
+        id: z.string(),
+        type: z.string(),
+        label: z.string().optional(),
+      }),
+    )
+    .optional(),
+  params: z
+    .array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        value: z.number(),
+        min: z.number(),
+        max: z.number(),
+        unit: z.string().optional(),
+      }),
+    )
+    .optional(),
+  controls: z.array(z.string()).optional(),
   ops: z
     .unknown()
-    .optional()
-    .describe("Freeform SceneOpsDocument fallback when no skill fits."),
+    .describe(
+      "Complete SceneOpsDocument: { version: 1, ops: [...] } for the full lab.",
+    ),
 });
 
 function logger() {
@@ -63,13 +80,14 @@ function buildUserPrompt(
 ): string {
   const domain = resolveDomain();
   const profile = getLearnerProfile(roomName);
+  const existing = getAccumulatedSceneOps(roomName);
+
   const parts = [
     domain.renderUserPromptPrefix,
     `Title hint: ${request.title ?? "Untitled"}`,
     `Lesson brief: ${request.visual_brief}`,
     `Mode: ${request.mode}`,
-    "Call emit_recipe with skillId + paramOverrides when a skill matches. Otherwise emit ops as scene_ops.",
-    `Registered skills:\n${skillCatalogPrompt()}`,
+    "Call emit_scene with a COMPLETE scene_ops document (version 1 + full ops list) plus title/observe. Never emit HTML, SVG, or Three.js code.",
   ];
 
   if (profile) {
@@ -81,18 +99,19 @@ function buildUserPrompt(
     );
   }
 
-  if (request.mode === "patch") {
-    const existing = getAccumulatedSceneOps(roomName);
-    if (existing) {
-      parts.push(
-        `Existing scene_ops (for context). Prefer re-emitting the same skillId with updated paramOverrides:\n${JSON.stringify(existing).slice(0, 2000)}`,
-      );
-    }
+  if (existing) {
+    const refineHint =
+      request.mode === "patch"
+        ? "Improve/tweak the existing lab for a better illustration of the brief. Emit a COMPLETE updated scene_ops document (full scene), not a partial delta."
+        : "Prior lab scene_ops are provided for continuity. Emit a COMPLETE scene_ops document for this brief (full scene).";
+    parts.push(
+      `${refineHint}\nPrior scene_ops:\n${JSON.stringify(existing).slice(0, 3500)}`,
+    );
   }
 
   if (repairHint) {
     parts.push(
-      `Previous emit was invalid. Fix these issues and call emit_recipe again:\n${repairHint}`,
+      `Previous emit was invalid. Fix these issues and call emit_scene again:\n${repairHint}`,
     );
   }
 
@@ -105,10 +124,9 @@ export type CanvasRenderJobResult = {
   content: string;
   content_length: number;
   summary: DemoSummary;
-  skillId?: string;
 };
 
-async function requestRecipeFromModel(options: {
+async function requestSceneFromModel(options: {
   request: RenderCanvasRequest;
   roomName: string;
   abortSignal?: AbortSignal;
@@ -120,26 +138,27 @@ async function requestRecipeFromModel(options: {
   const { request, roomName, abortSignal, maxOutputTokens, repairHint, onToolDelta } =
     options;
 
-  const emitRecipe = tool({
-    description: `Emit a recipe skill or constrained scene_ops for ${domain.subject.toLowerCase()}. Never emit HTML, SVG, or Three.js code.`,
-    inputSchema: emitRecipeSchema,
+  const emitScene = tool({
+    description: `Emit a complete constrained scene_ops lab for ${domain.subject.toLowerCase()}. Never emit HTML, SVG, or Three.js code.`,
+    inputSchema: emitSceneSchema,
     execute: async (input) => input,
   });
 
-  const systemPrompt = `${domain.renderSystemPrompt}\nYou MUST call the emit_recipe tool — do not answer with plain text.`;
+  const systemPrompt = `${domain.renderSystemPrompt}\nYou MUST call the emit_scene tool — do not answer with plain text.`;
 
   const provider = resolveLlmProvider();
   const modelId = resolveLlmModel("render");
   const renderProviderOptions = getRenderProviderOptions();
   logger().info(
     { provider, modelId, title: request.title, repair: Boolean(repairHint) },
-    "Starting recipe render job",
+    "Starting scene_ops render job",
   );
 
+  // OpenAI-compatible gateways (qwen/kimi) often reject forced toolName choice.
   const toolChoice =
-    provider === "kimi"
+    provider === "kimi" || provider === "qwen"
       ? ("required" as const)
-      : ({ type: "tool", toolName: "emit_recipe" } as const);
+      : ({ type: "tool", toolName: "emit_scene" } as const);
 
   let toolArguments = "";
 
@@ -147,7 +166,7 @@ async function requestRecipeFromModel(options: {
     model: getLanguageModel("render"),
     system: systemPrompt,
     prompt: buildUserPrompt(request, roomName, repairHint),
-    tools: { emit_recipe: emitRecipe },
+    tools: { emit_scene: emitScene },
     toolChoice,
     abortSignal,
     maxOutputTokens,
@@ -166,12 +185,12 @@ async function requestRecipeFromModel(options: {
       await onToolDelta?.();
     }
 
-    if (part.type === "tool-call" && part.toolName === "emit_recipe") {
+    if (part.type === "tool-call" && part.toolName === "emit_scene") {
       toolArguments = JSON.stringify(part.input ?? {});
     }
   }
 
-  const raw = parseEmitRecipeArgs(toolArguments);
+  const raw = parseEmitSceneArgs(toolArguments);
   return { raw, toolArguments };
 }
 
@@ -220,18 +239,18 @@ export async function runCanvasRenderJob(options: {
   let repairHint: string | undefined;
   let resolved: Awaited<ReturnType<typeof resolveOnce>> | null = null;
   let lastPreview = "";
-  let lastError = "Model did not emit a valid recipe";
+  let lastError = "Model did not emit a valid scene";
 
   async function resolveOnce(raw: unknown) {
-    const payload = parseEmitRecipe(raw);
+    const payload = parseEmitScene(raw);
     if (!payload) {
-      return { error: "Model did not emit a recipe payload" } as const;
+      return { error: "Model did not emit a scene payload with ops" } as const;
     }
-    return resolveRecipeEmit(payload, request.visual_brief);
+    return resolveSceneEmit(payload);
   }
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { raw, toolArguments } = await requestRecipeFromModel({
+    const { raw, toolArguments } = await requestSceneFromModel({
       request,
       roomName,
       abortSignal,
@@ -247,7 +266,7 @@ export async function runCanvasRenderJob(options: {
       repairHint = result.error;
       logger().warn(
         { attempt, error: result.error, preview: lastPreview },
-        "Recipe emit validation failed",
+        "Scene emit validation failed",
       );
       continue;
     }
@@ -255,25 +274,13 @@ export async function runCanvasRenderJob(options: {
     break;
   }
 
-  // Hard fallback to nearest skill from brief
-  if (!resolved) {
-    const fallback = resolveRecipeEmit({}, request.visual_brief);
-    if (!("error" in fallback)) {
-      resolved = fallback;
-      logger().warn(
-        { skillId: fallback.skillId },
-        "Using keyword skill fallback after emit failures",
-      );
-    }
-  }
-
   if (!resolved) {
     logger().error(
       { preview: lastPreview, error: lastError },
-      "Background render did not produce a valid recipe",
+      "Background render did not produce a valid scene_ops document",
     );
     throw new Error(
-      `Background render did not produce a valid recipe: ${lastError}`,
+      `Background render did not produce a valid scene: ${lastError}`,
     );
   }
 
@@ -285,17 +292,15 @@ export async function runCanvasRenderJob(options: {
   };
 
   setAccumulatedSceneOps(roomName, "live", resolved.doc);
-  setLastSkillId(roomName, resolved.skillId ?? null);
   setDemoSummary(roomName, summary);
 
   logger().info(
     {
       title,
       contentLength: content.length,
-      skillId: resolved.skillId,
       ops: resolved.doc.ops.length,
     },
-    "Recipe resolved; publishing scene_ops to client",
+    "Scene resolved; publishing scene_ops to client",
   );
 
   const input: RenderCanvasInput = {
@@ -327,6 +332,5 @@ export async function runCanvasRenderJob(options: {
     content: input.content,
     content_length: input.content.length,
     summary,
-    skillId: resolved.skillId,
   };
 }

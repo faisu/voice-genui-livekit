@@ -3,144 +3,12 @@ import {
   coerceSceneOpsDocument,
   sceneOpsDocumentSchema,
 } from "../sceneOps";
-import { circularOrbitSkill } from "./circularOrbit/skill";
-import { inclinedPlaneSkill } from "./inclinedPlane/skill";
-import { projectileSkill } from "./projectile/skill";
-import { shmSpringSkill } from "./shmSpring/skill";
-import { simplePendulumSkill } from "./simplePendulum/skill";
-import type { DemoSummary, EmitRecipePayload, RecipeSkill } from "./types";
+import type { DemoSummary, EmitScenePayload } from "./types";
 
-const SKILLS: RecipeSkill[] = [
-  projectileSkill,
-  simplePendulumSkill,
-  circularOrbitSkill,
-  shmSpringSkill,
-  inclinedPlaneSkill,
-];
-
-const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));
-
-const KEYWORD_MAP: Array<{ skillId: string; keywords: string[] }> = [
-  {
-    skillId: "projectile",
-    keywords: ["projectile", "trajectory", "launch", "cannon", "ballistic"],
-  },
-  {
-    skillId: "simplePendulum",
-    keywords: ["pendulum", "bob", "swing", "period"],
-  },
-  {
-    skillId: "circularOrbit",
-    keywords: ["orbit", "planet", "satellite", "kepler", "circular motion"],
-  },
-  {
-    skillId: "shmSpring",
-    keywords: ["spring", "shm", "harmonic", "oscillat"],
-  },
-  {
-    skillId: "inclinedPlane",
-    keywords: ["incline", "ramp", "slope", "inclined plane"],
-  },
-];
-
-export function listSkills(): RecipeSkill[] {
-  return SKILLS.slice();
-}
-
-export function getSkill(id: string): RecipeSkill | undefined {
-  return BY_ID.get(id);
-}
-
-export function skillCatalogPrompt(): string {
-  return SKILLS.map((s) => `- ${s.id}: ${s.promptSnippet}`).join("\n");
-}
-
-export function matchSkillFromBrief(brief: string): string | null {
-  const lower = brief.toLowerCase();
-  for (const entry of KEYWORD_MAP) {
-    if (entry.keywords.some((k) => lower.includes(k))) {
-      return entry.skillId;
-    }
-  }
-  return null;
-}
-
-export type ResolveRecipeResult = {
+export type ResolveSceneResult = {
   doc: SceneOpsDocument;
   summary: DemoSummary;
-  skillId?: string;
 };
-
-export function resolveRecipeEmit(
-  payload: EmitRecipePayload,
-  briefFallback?: string,
-): ResolveRecipeResult | { error: string } {
-  let skillId = payload.skillId?.trim();
-  if (!skillId && briefFallback) {
-    skillId = matchSkillFromBrief(briefFallback) ?? undefined;
-  }
-
-  if (skillId) {
-    const skill = getSkill(skillId);
-    if (!skill) {
-      return { error: `Unknown skillId "${skillId}"` };
-    }
-    const overrides = {
-      params: payload.paramOverrides,
-      observe: payload.observe,
-      title: payload.title,
-    };
-    return {
-      doc: skill.buildOps(overrides),
-      summary: skill.buildSummary(overrides),
-      skillId: skill.id,
-    };
-  }
-
-  if (payload.ops) {
-    const coerced = coerceSceneOpsDocument(payload.ops);
-    if (!coerced) {
-      return { error: "Invalid scene_ops document" };
-    }
-    const parsed = sceneOpsDocumentSchema.safeParse(coerced);
-    if (!parsed.success) {
-      return {
-        error: parsed.error.issues
-          .slice(0, 8)
-          .map((i) => i.message)
-          .join("; "),
-      };
-    }
-    assertNoExternalAssets(parsed.data);
-    return {
-      doc: parsed.data,
-      summary: summaryFromSceneOps(parsed.data, payload.title, payload.observe),
-    };
-  }
-
-  if (briefFallback) {
-    const fallbackId = matchSkillFromBrief(briefFallback);
-    if (fallbackId) {
-      const skill = getSkill(fallbackId)!;
-      return {
-        doc: skill.buildOps({
-          observe: payload.observe,
-          title: payload.title,
-        }),
-        summary: skill.buildSummary({
-          observe: payload.observe,
-          title: payload.title,
-        }),
-        skillId: skill.id,
-      };
-    }
-  }
-
-  return {
-    error:
-      "Emit skillId + paramOverrides (preferred) or a valid scene_ops document",
-  };
-}
 
 function assertNoExternalAssets(doc: SceneOpsDocument): void {
   const raw = JSON.stringify(doc);
@@ -210,7 +78,60 @@ export function summaryFromSceneOps(
   };
 }
 
-export function parseEmitRecipe(raw: unknown): EmitRecipePayload | null {
+export function resolveSceneEmit(
+  payload: EmitScenePayload,
+): ResolveSceneResult | { error: string } {
+  const coerced = coerceSceneOpsDocument(payload.ops);
+  if (!coerced) {
+    return { error: "Invalid scene_ops document" };
+  }
+  const parsed = sceneOpsDocumentSchema.safeParse(coerced);
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues
+        .slice(0, 8)
+        .map((i) => i.message)
+        .join("; "),
+    };
+  }
+
+  try {
+    assertNoExternalAssets(parsed.data);
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const inferred = summaryFromSceneOps(
+    parsed.data,
+    payload.title,
+    payload.observe,
+  );
+
+  return {
+    doc: parsed.data,
+    summary: {
+      ...inferred,
+      title: payload.title?.trim() || inferred.title,
+      observe: payload.observe?.trim() || inferred.observe,
+      elements:
+        payload.elements && payload.elements.length > 0
+          ? payload.elements
+          : inferred.elements,
+      params:
+        payload.params && payload.params.length > 0
+          ? payload.params
+          : inferred.params,
+      controls:
+        payload.controls && payload.controls.length > 0
+          ? payload.controls
+          : inferred.controls,
+    },
+  };
+}
+
+export function parseEmitScene(raw: unknown): EmitScenePayload | null {
   if (raw == null) return null;
   let value: unknown = raw;
   if (typeof value === "string") {
@@ -223,32 +144,39 @@ export function parseEmitRecipe(raw: unknown): EmitRecipePayload | null {
   if (!value || typeof value !== "object") return null;
   const obj = value as Record<string, unknown>;
 
-  // Wrapped forms
-  if (obj.recipe && typeof obj.recipe === "object") {
-    return parseEmitRecipe(obj.recipe);
+  if (obj.scene && typeof obj.scene === "object") {
+    return parseEmitScene(obj.scene);
   }
 
-  const payload: EmitRecipePayload = {};
-  if (typeof obj.skillId === "string") payload.skillId = obj.skillId;
-  if (typeof obj.observe === "string") payload.observe = obj.observe;
-  if (typeof obj.title === "string") payload.title = obj.title;
-  if (obj.paramOverrides && typeof obj.paramOverrides === "object") {
-    const overrides: Record<string, number> = {};
-    for (const [k, v] of Object.entries(
-      obj.paramOverrides as Record<string, unknown>,
-    )) {
-      if (typeof v === "number" && Number.isFinite(v)) overrides[k] = v;
-    }
-    payload.paramOverrides = overrides;
-  }
+  const title = typeof obj.title === "string" ? obj.title : undefined;
+  const observe = typeof obj.observe === "string" ? obj.observe : undefined;
 
+  let opsDoc: SceneOpsDocument | null = null;
   if (obj.ops || obj.version === 1) {
-    const coerced = coerceSceneOpsDocument(
-      obj.ops ? { version: 1, ops: obj.ops } : obj,
+    opsDoc = coerceSceneOpsDocument(
+      obj.ops && !Array.isArray(obj.ops) && typeof obj.ops === "object"
+        ? obj.ops
+        : obj.ops
+          ? { version: 1, ops: obj.ops }
+          : obj,
     );
-    if (coerced) payload.ops = coerced;
   }
 
-  if (payload.skillId || payload.ops) return payload;
-  return null;
+  if (!opsDoc) return null;
+
+  const payload: EmitScenePayload = { ops: opsDoc, title, observe };
+
+  if (Array.isArray(obj.elements)) {
+    payload.elements = obj.elements as DemoSummary["elements"];
+  }
+  if (Array.isArray(obj.params)) {
+    payload.params = obj.params as DemoSummary["params"];
+  }
+  if (Array.isArray(obj.controls)) {
+    payload.controls = obj.controls.filter(
+      (c): c is string => typeof c === "string",
+    );
+  }
+
+  return payload;
 }

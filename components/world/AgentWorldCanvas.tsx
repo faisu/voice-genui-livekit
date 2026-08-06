@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useDomain } from "@/components/DomainProvider";
 import { SceneBuilder } from "@/components/world/SceneBuilder";
-import { tryParseSceneOpsDocument } from "@/lib/sceneOps";
+import { tryParseSceneOpsDocument, type SceneOpsDocument } from "@/lib/sceneOps";
 import { prepareCanvasContent } from "@/lib/sanitize";
 import type { WorldDemo } from "@/lib/types";
 
@@ -20,6 +20,7 @@ export function AgentWorldCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const builderRef = useRef<SceneBuilder | null>(null);
   const onEventRef = useRef(onCanvasEvent);
+  const pendingDocRef = useRef<SceneOpsDocument | null>(null);
 
   useEffect(() => {
     onEventRef.current = onCanvasEvent;
@@ -34,6 +35,12 @@ export function AgentWorldCanvas({
       notifyHost: (payload) => onEventRef.current(payload),
     });
     builderRef.current = builder;
+    // Always show a live lab shell (grid + ground) while waiting for demos.
+    builder.bootstrapIdle();
+    // Re-apply after Strict Mode remount — apply effect may not re-fire.
+    if (pendingDocRef.current) {
+      builder.apply(pendingDocRef.current, "replace");
+    }
 
     return () => {
       builder.dispose();
@@ -60,6 +67,7 @@ export function AgentWorldCanvas({
   }, [readyContent]);
 
   useEffect(() => {
+    pendingDocRef.current = parsed.doc;
     const builder = builderRef.current;
     if (!builder || !parsed.doc) return;
     builder.apply(parsed.doc, "replace");
@@ -69,7 +77,7 @@ export function AgentWorldCanvas({
 
   return (
     <div className="absolute inset-0 bg-[#050508]">
-      <div ref={containerRef} className="h-full w-full" />
+      <div ref={containerRef} className="absolute inset-0 h-full w-full" />
       {!demo && !showBuildingChip ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <p className="text-[13px] tracking-wide text-slate-500">

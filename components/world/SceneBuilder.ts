@@ -71,7 +71,7 @@ export class SceneBuilder {
   private scene: THREE.Scene | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
   private controls: OrbitControls | null = null;
-  private clock = new THREE.Clock();
+  private timer = new THREE.Timer();
   private frame = 0;
   private paused = false;
   private objects = new Map<string, ManagedObject>();
@@ -82,14 +82,22 @@ export class SceneBuilder {
   private animateCamera = createAnimateCamera(THREE);
   private paramBindings = new Map<string, (value: number) => void>();
   private readoutTimer = 0;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(options: SceneBuilderOptions) {
     this.container = options.container;
     this.notifyHost = options.notifyHost;
+    this.timer.connect(document);
   }
 
   get isDisposed() {
     return this.disposed;
+  }
+
+  /** Boot an empty lab shell so the viewport is live before the first demo. */
+  bootstrapIdle(): void {
+    if (this.disposed) return;
+    this.ensureLab(true, 0x050508);
   }
 
   /** Replace mode: clear demo objects and re-apply. */
@@ -101,6 +109,7 @@ export class SceneBuilder {
     for (const op of doc.ops) {
       this.applyOp(op);
     }
+    this.syncViewportSize();
     this.notifyHost({
       action: "scene_applied",
       mode,
@@ -112,7 +121,10 @@ export class SceneBuilder {
     if (this.disposed) return;
     this.disposed = true;
     cancelAnimationFrame(this.frame);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     window.removeEventListener("resize", this.onResize);
+    this.timer.disconnect();
     if (typeof (globalThis as { __cameraAnimCancel?: () => void }).__cameraAnimCancel === "function") {
       try {
         (globalThis as { __cameraAnimCancel?: () => void }).__cameraAnimCancel?.();
@@ -182,18 +194,17 @@ export class SceneBuilder {
     scene.background = new THREE.Color(clearColor);
     scene.fog = new THREE.Fog(clearColor, 12, 40);
 
-    const camera = new THREE.PerspectiveCamera(
-      55,
-      this.container.clientWidth / Math.max(this.container.clientHeight, 1),
-      0.1,
-      200,
-    );
+    const { width, height } = this.viewportSize();
+    const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 200);
     camera.position.set(6, 4, 10);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+    renderer.setSize(width, height, false);
     renderer.setClearColor(clearColor);
+    renderer.domElement.style.display = "block";
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
     this.container.appendChild(renderer.domElement);
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.45);
@@ -234,31 +245,47 @@ export class SceneBuilder {
     this.renderer = renderer;
     this.controls = controls;
     this.labReady = true;
-    this.clock.start();
 
     window.addEventListener("resize", this.onResize);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = new ResizeObserver(() => this.syncViewportSize());
+    this.resizeObserver.observe(this.container);
+
+    this.timer.update();
     this.tick();
+    // Defer one frame in case the container was 0×0 at mount.
+    requestAnimationFrame(() => this.syncViewportSize());
 
     (globalThis as { __canvasDispose?: () => void }).__canvasDispose = () =>
       this.dispose();
   }
 
-  private onResize = () => {
-    if (!this.camera || !this.renderer || !this.container.clientWidth) return;
-    this.camera.aspect =
-      this.container.clientWidth / Math.max(this.container.clientHeight, 1);
+  private viewportSize(): { width: number; height: number } {
+    const width = Math.max(1, Math.floor(this.container.clientWidth) || 1);
+    const height = Math.max(1, Math.floor(this.container.clientHeight) || 1);
+    return { width, height };
+  }
+
+  private syncViewportSize = () => {
+    if (!this.camera || !this.renderer) return;
+    const { width, height } = this.viewportSize();
+    const canvas = this.renderer.domElement;
+    if (canvas.width === width && canvas.height === height) return;
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(
-      this.container.clientWidth,
-      this.container.clientHeight,
-    );
+    this.renderer.setSize(width, height, false);
+  };
+
+  private onResize = () => {
+    this.syncViewportSize();
   };
 
   private tick = () => {
     if (this.disposed || !this.renderer || !this.scene || !this.camera) return;
     this.frame = requestAnimationFrame(this.tick);
 
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    this.timer.update();
+    const dt = Math.min(this.timer.getDelta(), 0.05);
     if (!this.paused) {
       this.updateMotions(dt);
       this.updateTrails();

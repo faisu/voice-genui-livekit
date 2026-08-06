@@ -21,7 +21,7 @@ import {
 } from "../lib/ai/index.js";
 
 /**
- * Voice-agent LLM via the Vercel AI SDK (Anthropic / OpenAI / Google / Kimi).
+ * Voice-agent LLM via the Vercel AI SDK (Qwen / Anthropic / OpenAI / Google / Kimi).
  * Bypasses LiveKit Inference gateway credits. Canvas rendering stays on the
  * same provider keys via `canvasRenderWorker.ts`.
  */

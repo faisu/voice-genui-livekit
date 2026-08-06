@@ -1,11 +1,7 @@
-export type { DemoSummary, RecipeSkill, EmitRecipePayload } from "./types";
+export type { DemoSummary, EmitScenePayload } from "./types";
 export {
-  listSkills,
-  getSkill,
-  skillCatalogPrompt,
-  matchSkillFromBrief,
-  resolveRecipeEmit,
-  parseEmitRecipe,
+  resolveSceneEmit,
+  parseEmitScene,
   summaryFromSceneOps,
 } from "./registry";
 export { MATERIAL_PRESETS, resolveMaterialPreset } from "./materials";

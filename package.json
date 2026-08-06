@@ -12,7 +12,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "smoke:recipes": "tsx scripts/smokeRecipes.ts"
+    "smoke:recipes": "tsx scripts/smokeRecipes.ts",
+    "smoke:scene-ops": "tsx scripts/smokeRecipes.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.15",

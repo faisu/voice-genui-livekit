@@ -14,9 +14,8 @@ type StageReadyWaiter = {
 export type RoomSession = {
   roomName: string;
   currentCanvasState: CanvasState | null;
-  /** Last applied scene ops (agent-internal; used for patch context). */
+  /** Last applied scene ops (agent-internal; used for patch/improve context). */
   accumulatedSceneOps: SceneOpsDocument | null;
-  lastSkillId: string | null;
   lastDemoSummary: DemoSummary | null;
   learnerProfile: LearnerProfile | null;
   /** True once the personalized greeting has been issued. */
@@ -32,7 +31,6 @@ export function getRoomSession(roomName: string): RoomSession {
       roomName,
       currentCanvasState: null,
       accumulatedSceneOps: null,
-      lastSkillId: null,
       lastDemoSummary: null,
       learnerProfile: null,
       greeted: false,
@@ -51,14 +49,6 @@ export function setCanvasState(roomName: string, state: CanvasState): void {
 
 export function getCanvasState(roomName: string): CanvasState | null {
   return getRoomSession(roomName).currentCanvasState ?? null;
-}
-
-export function setLastSkillId(roomName: string, skillId: string | null): void {
-  getRoomSession(roomName).lastSkillId = skillId;
-}
-
-export function getLastSkillId(roomName: string): string | null {
-  return getRoomSession(roomName).lastSkillId;
 }
 
 export function setDemoSummary(

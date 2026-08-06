@@ -460,11 +460,16 @@ export function mergeSceneOps(
   };
 }
 
-/** Prompt fragment listing allowed ops for the render model (freeform fallback). */
-export const SCENE_OPS_PROMPT = `Prefer emitting a Recipe Skill via emit_recipe: { "skillId", "paramOverrides"?, "observe"?, "title"? }.
-
-If no skill fits, emit freeform scene_ops:
-{"version":1,"ops":[...]}
+/** Prompt fragment listing allowed ops for the render model. */
+export const SCENE_OPS_PROMPT = `Call emit_scene with a COMPLETE freeform scene_ops lab:
+{
+  "title": "optional",
+  "observe": "short cue for the student",
+  "elements": [{ "id", "type", "label"? }],
+  "params": [{ "id", "label", "value", "min", "max", "unit"? }],
+  "controls": ["playPause", "reset", "slider:…"],
+  "ops": { "version": 1, "ops": [ ... ] }
+}
 
 Allowed ops (discriminated by "op"):
 - ensureLab: { grid?, clearColor? }
@@ -478,9 +483,11 @@ Allowed ops (discriminated by "op"):
 - remove: { id }
 
 Rules:
+- Always start with ensureLab. Include setOverlay with play/pause/reset and a slider when a parameter matters.
 - Use unique string ids. Prefer cyan/amber accents on dark lab.
 - Keep ops lists short (≤20).
 - color must be a NUMBER (e.g. 0x38bdf8), never "#38bdf8"
 - positions/vectors must be [x,y,z] number arrays
 - version must be number 1
+- Emit the FULL scene every time (including improve/patch) — never a partial delta
 - NEVER reference http(s) URLs, .gltf, .glb, or .hdr assets`;

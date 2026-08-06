@@ -3,14 +3,19 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 
-export type LlmProvider = "kimi" | "anthropic" | "openai" | "google";
+export type LlmProvider = "qwen" | "kimi" | "anthropic" | "openai" | "google";
 
 export type LlmModelKind = "chat" | "render";
 
 /** Official Moonshot / Kimi OpenAI-compatible endpoint. */
 export const KIMI_BASE_URL = "https://api.moonshot.ai/v1";
 
+/** DashScope international OpenAI-compatible endpoint (Qwen). */
+export const QWEN_BASE_URL =
+  "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+
 const DEFAULT_MODELS: Record<LlmProvider, string> = {
+  qwen: "qwen3.8-max",
   kimi: "kimi-k3",
   anthropic: "claude-sonnet-5",
   openai: "gpt-4.1",
@@ -20,15 +25,22 @@ const DEFAULT_MODELS: Record<LlmProvider, string> = {
 export function resolveLlmProvider(): LlmProvider {
   const configured = process.env.LLM_PROVIDER?.trim().toLowerCase();
   if (
+    configured === "qwen" ||
+    configured === "dashscope" ||
     configured === "kimi" ||
     configured === "moonshot" ||
     configured === "anthropic" ||
     configured === "openai" ||
     configured === "google"
   ) {
-    return configured === "moonshot" ? "kimi" : configured;
+    if (configured === "moonshot") return "kimi";
+    if (configured === "dashscope") return "qwen";
+    return configured;
   }
 
+  if (process.env.DASHSCOPE_API_KEY || process.env.QWEN_API_KEY) {
+    return "qwen";
+  }
   if (process.env.ANTHROPIC_API_KEY) {
     return "anthropic";
   }
@@ -42,7 +54,7 @@ export function resolveLlmProvider(): LlmProvider {
     return "google";
   }
 
-  return "anthropic";
+  return "qwen";
 }
 
 export function resolveLlmModel(kind: LlmModelKind = "chat"): string {
@@ -65,6 +77,22 @@ function resolveKimiApiKey(): string | undefined {
   );
 }
 
+function resolveQwenApiKey(): string | undefined {
+  return (
+    process.env.DASHSCOPE_API_KEY?.trim() ||
+    process.env.QWEN_API_KEY?.trim() ||
+    undefined
+  );
+}
+
+function resolveQwenBaseUrl(): string {
+  return (
+    process.env.QWEN_BASE_URL?.trim() ||
+    process.env.DASHSCOPE_BASE_URL?.trim() ||
+    QWEN_BASE_URL
+  );
+}
+
 export function getLanguageModel(
   kind: LlmModelKind = "chat",
   modelId?: string,
@@ -73,6 +101,15 @@ export function getLanguageModel(
   const resolvedModelId = modelId ?? resolveLlmModel(kind);
 
   switch (provider) {
+    case "qwen": {
+      // DashScope is OpenAI-compatible for Chat Completions.
+      const qwen = createOpenAI({
+        apiKey: resolveQwenApiKey(),
+        baseURL: resolveQwenBaseUrl(),
+        name: "qwen",
+      });
+      return qwen.chat(resolvedModelId);
+    }
     case "kimi": {
       // Moonshot is OpenAI-compatible for Chat Completions only — not /v1/responses.
       const kimi = createOpenAI({
@@ -99,6 +136,7 @@ export function getLanguageModel(
 export function getRenderProviderOptions():
   | { anthropic: { effort: "low" } }
   | { kimi: { reasoningEffort: "low" } }
+  | { qwen: { reasoningEffort: "low" } }
   | undefined {
   const provider = resolveLlmProvider();
   if (provider === "anthropic") {
@@ -108,9 +146,12 @@ export function getRenderProviderOptions():
   if (provider === "kimi") {
     return { kimi: { reasoningEffort: "low" } };
   }
+  if (provider === "qwen") {
+    return { qwen: { reasoningEffort: "low" } };
+  }
   return undefined;
 }
 
 export function listSupportedProviders(): LlmProvider[] {
-  return ["anthropic", "kimi", "openai", "google"];
+  return ["qwen", "anthropic", "kimi", "openai", "google"];
 }

@@ -31,11 +31,10 @@ export const physicsDomain: DomainConfig = {
 - Use vivid, accurate physics language but stay conversational for voice.
 - Build intuition first, then light equations, then invite interaction with the demo.
 - For almost every concept that involves motion, forces, fields, or geometry — MUST call render_canvas with a detailed visual_brief for one interactive Three.js demo.
-- Prefer Recipe Skills: projectile, simplePendulum, circularOrbit, shmSpring, inclinedPlane.
-- Prefer one clear demo; use mode patch (visual_brief only) for small refinements instead of spawning many demos.`,
+- Prefer one clear demo; use mode patch (visual_brief only) to improve the illustration instead of spawning many demos.`,
     renderTriggers: "motion, forces, fields, geometry",
     visualBriefExtras:
-      "Specify parameters with units (mass, g, angle, velocity…). Prefer skillIds. Include play/pause/reset and at least one adjustable parameter.",
+      "Specify parameters with units (mass, g, angle, velocity…). Include play/pause/reset and at least one adjustable parameter.",
   }),
 
   agentInstructions: buildAgentInstructions("physics", "physics teacher"),
@@ -50,19 +49,19 @@ export const physicsDomain: DomainConfig = {
     accuracyNote:
       "Physics must be visually correct (gravity down −Y, consistent units, realistic relative motion)",
     sceneGuidance:
-      "Prefer skills projectile, simplePendulum, circularOrbit, shmSpring, inclinedPlane. Use sphere/box/cylinder/arrows/trails. Cyan/amber accents on dark lab.",
+      "Use sphere/box/cylinder/arrows/trails with setMotion (projectile, pendulum, orbit, oscillate). Cyan/amber accents on dark lab.",
   }),
 
   renderUserPromptPrefix:
-    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive physics Three.js lab (no HTML/SVG).",
+    "Emit a complete scene_ops document for a FULL-VIEWPORT interactive physics Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
-    "Replace or patch the FULL lab viewport with an interactive physics Three.js demo. " +
-    "Pass visual_brief describing the demo (prefer Recipe Skills). " +
+    "Replace or improve the FULL lab viewport with an interactive physics Three.js demo. " +
+    "Pass visual_brief describing the full demo. " +
     "A verified summary is returned when the demo is live.",
 
   visualBriefDescription:
-    "Physics lesson brief: concept, preferred skillId if known, objects, forces/vectors, parameters (mass, g, angle, velocity), motion, play/pause/reset + slider, what to observe.",
+    "Physics lesson brief: concept, objects, forces/vectors, parameters (mass, g, angle, velocity), motion, play/pause/reset + slider, what to observe.",
 
   conceptSuggestions: [
     { label: "Projectile motion", prompt: "Explain projectile motion with an interactive demo." },

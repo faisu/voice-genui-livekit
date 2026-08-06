@@ -53,7 +53,7 @@ export const mathematicsDomain: DomainConfig = {
   }),
 
   renderUserPromptPrefix:
-    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive mathematics Three.js lab (no HTML/SVG).",
+    "Emit a complete scene_ops document for a FULL-VIEWPORT interactive mathematics Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
     "Replace or patch the FULL viewport with an interactive math Three.js visualization. " +

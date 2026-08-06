@@ -53,7 +53,7 @@ export const chemistryDomain: DomainConfig = {
   }),
 
   renderUserPromptPrefix:
-    "Emit a Recipe Skill or scene_ops for a FULL-VIEWPORT interactive chemistry Three.js lab (no HTML/SVG).",
+    "Emit a complete scene_ops document for a FULL-VIEWPORT interactive chemistry Three.js lab (no HTML/SVG).",
 
   renderCanvasToolDescription:
     "Replace or patch the FULL lab viewport with an interactive chemistry Three.js demo. " +

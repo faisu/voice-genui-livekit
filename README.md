@@ -28,29 +28,30 @@ Open [http://localhost:3000](http://localhost:3000).
 | Role | Default |
 |------|---------|
 | STT | Deepgram (`STT_PROVIDER=deepgram`) or LiveKit Inference |
-| LLM | Anthropic Claude via AI SDK (`LLM_PROVIDER` / `LLM_MODEL`) — bills your provider key, not LiveKit Inference |
+| LLM | Qwen 3.8 Max via AI SDK (`LLM_PROVIDER` / `LLM_MODEL`) — bills your provider key, not LiveKit Inference |
 | TTS | Deepgram or LiveKit Inference (`cartesia/sonic-3`) |
 
 Optional STT/TTS Inference overrides: `LIVEKIT_STT_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
 
 ## Canvas LLM provider
 
-Async Three.js / scene-ops generation uses the same Vercel AI SDK provider. Default is **Claude Sonnet 5** (Anthropic).
+Async Three.js / scene-ops generation uses the same Vercel AI SDK provider. Default is **Qwen 3.8 Max** (DashScope OpenAI-compatible). The render worker emits a complete constrained `scene_ops` lab in one shot; call `render_canvas` again to improve or update the illustration.
 
 ```bash
-LLM_PROVIDER=anthropic
-LLM_MODEL=claude-sonnet-5
-ANTHROPIC_API_KEY=...
+LLM_PROVIDER=qwen
+LLM_MODEL=qwen3.8-max
+DASHSCOPE_API_KEY=...
 ```
 
 | Provider | API key env | Example models |
 |----------|-------------|----------------|
-| `anthropic` (default) | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
+| `qwen` (default) | `DASHSCOPE_API_KEY` (or `QWEN_API_KEY`) | `qwen3.8-max` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-5` |
 | `kimi` | `MOONSHOT_API_KEY` (or `KIMI_API_KEY`) | `kimi-k3` |
 | `openai` | `OPENAI_API_KEY` | `gpt-4.1`, `gpt-4o` |
 | `google` | `GOOGLE_GENERATIVE_AI_API_KEY` | `gemini-2.5-flash` |
 
-Optional `LLM_RENDER_MODEL` overrides the model used for async canvas generation. Optional `KIMI_BASE_URL` overrides the Moonshot endpoint (default `https://api.moonshot.ai/v1`).
+Optional `LLM_RENDER_MODEL` overrides the model used for async canvas generation. Optional `QWEN_BASE_URL` / `DASHSCOPE_BASE_URL` overrides the DashScope endpoint (default `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Optional `KIMI_BASE_URL` overrides the Moonshot endpoint.
 
 ## Choose a domain (subject)
 
@@ -79,9 +80,9 @@ See [lib/domain/README.md](lib/domain/README.md) for adding custom domains.
 | Token API | `/api/token` on Vercel |
 | Voice agent | LiveKit Agents worker (runs separately) |
 | Voice STT / TTS | Deepgram or LiveKit Inference |
-| Voice LLM | Vercel AI SDK (Anthropic / OpenAI / Google / Kimi) |
+| Voice LLM | Vercel AI SDK (Qwen / Anthropic / OpenAI / Google / Kimi) |
 | Canvas LLM | Vercel AI SDK (same provider keys) |
-| GenUI | Async Three.js scene generation via tool calls |
+| GenUI | Async single-shot scene_ops generation via tool calls |
 
 ## Deploy
 
@@ -119,9 +120,9 @@ If you see `no agent project detected`, confirm you’re in the repo root (`ls p
 | Secret | Purpose |
 |--------|---------|
 | `DOMAIN` | Must match the Vercel `DOMAIN` |
-| `MOONSHOT_API_KEY` (or Anthropic / OpenAI / Google) | Canvas generation via AI SDK |
+| `DASHSCOPE_API_KEY` (or Anthropic / OpenAI / Google / Moonshot) | Canvas generation via AI SDK |
 
-Optional: `LLM_PROVIDER`, `LLM_MODEL`, `LLM_RENDER_MODEL`, `KIMI_BASE_URL`, `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
+Optional: `LLM_PROVIDER`, `LLM_MODEL`, `LLM_RENDER_MODEL`, `QWEN_BASE_URL`, `KIMI_BASE_URL`, `LIVEKIT_STT_MODEL`, `LIVEKIT_LLM_MODEL`, `LIVEKIT_TTS_MODEL`, `LIVEKIT_TTS_VOICE`.
 
 The worker registers as `voice-genui-agent` — the same name the web token API dispatches.
 
@@ -140,13 +141,14 @@ Deploy the same repo multiple times with different `DOMAIN` / `NEXT_PUBLIC_DOMAI
 
 ```
 agent/           LiveKit voice agent + render tools
-  tools/         render_canvas, render_quiz
-  llm.ts         LiveKit Inference LLM for the voice agent
-  canvasRenderWorker.ts  Async Three.js generation (AI SDK)
+  tools/         render_canvas
+  llm.ts         Voice LLM via AI SDK (default Qwen)
+  canvasRenderWorker.ts  Async single-shot scene_ops generation (AI SDK)
 Dockerfile       LiveKit Cloud agent image
-lib/ai/          AI SDK helpers for canvas rendering
+lib/ai/          AI SDK provider helpers (Qwen / Anthropic / …)
 lib/domain/      Domain presets (physics, chemistry, …)
-components/world/  Lab viewport, captions, quiz overlay
+lib/recipes/     Motion solvers + material presets (no skill catalog)
+components/world/  Lab viewport, captions, SceneBuilder
 app/             Next.js pages + token API
 ```
 

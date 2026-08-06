@@ -76,10 +76,10 @@ export function parseEmitCanvasContent(raw: string): {
   return { content_type: "scene_ops", content };
 }
 
-/** Extract recipe emit payload from emit_recipe tool arguments. */
-export function parseEmitRecipeArgs(raw: string): unknown | null {
+/** Extract scene emit payload from emit_scene tool arguments. */
+export function parseEmitSceneArgs(raw: string): unknown | null {
   const parsed = safeParseJson(raw);
-  if (parsed.skillId || parsed.ops || parsed.recipe || parsed.version === 1) {
+  if (parsed.ops || parsed.version === 1 || parsed.scene) {
     return parsed;
   }
   if (parsed.spec && typeof parsed.spec === "object") {
@@ -88,9 +88,14 @@ export function parseEmitRecipeArgs(raw: string): unknown | null {
   return Object.keys(parsed).length ? parsed : null;
 }
 
+/** @deprecated Use parseEmitSceneArgs. */
+export function parseEmitRecipeArgs(raw: string): unknown | null {
+  return parseEmitSceneArgs(raw);
+}
+
 /** @deprecated VisualSpec path removed. */
 export function parseEmitVisualSpec(raw: string): unknown | null {
-  return parseEmitRecipeArgs(raw);
+  return parseEmitSceneArgs(raw);
 }
 
 /** Best-effort extract of metadata from streaming partial JSON. */

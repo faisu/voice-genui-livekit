@@ -38,7 +38,7 @@ export type DomainConfig = {
   /** Template when render may already be covered (use {callIds}) */
   renderMaybeCoveredTemplate: string;
 
-  /** System prompt for the Recipe / scene_ops render worker */
+  /** System prompt for the scene_ops render worker */
   renderSystemPrompt: string;
   /** Prefix for the render worker user prompt */
   renderUserPromptPrefix: string;

@@ -7,7 +7,11 @@ import { runCanvasRenderJob } from "../canvasRenderWorker.js";
 import { publishToolCallDelta } from "./renderCanvas.js";
 
 export const renderCanvasRequestSchema = z.object({
-  mode: z.enum(["replace", "patch"]),
+  mode: z
+    .enum(["replace", "patch"])
+    .describe(
+      "replace = new or rebuilt illustration; patch = improve/tweak the current lab (still regenerates a full scene).",
+    ),
   content_type: z
     .literal("scene_ops")
     .optional()
@@ -86,13 +90,13 @@ export function createRenderCanvasTool(room: Room, roomName: string) {
           title: result.title ?? domain.demoDefaultTitle,
           content_type: result.content_type,
           content_length: result.content_length,
-          skillId: result.skillId ?? null,
           summary: result.summary,
           message:
             `The demo "${result.summary.title}" is now live. ` +
             `ONLY describe what is in summary (elements, params, observe). ` +
             `Observation cue: ${result.summary.observe} ` +
-            `Invite them to try the interactive controls listed in summary.controls.`,
+            `Invite them to try the interactive controls listed in summary.controls. ` +
+            `To improve the illustration, call render_canvas again with mode patch or replace and an updated visual_brief.`,
         });
       } catch (error) {
         const message =

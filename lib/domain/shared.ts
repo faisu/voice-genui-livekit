@@ -1,4 +1,4 @@
-import { skillCatalogPrompt } from "../recipes";
+import { SCENE_OPS_PROMPT } from "../sceneOps";
 import type { DomainConfig } from "./types";
 
 const VOICE_RULES = `Voice rules:
@@ -20,33 +20,16 @@ const LESSON_FLOW = `Lesson flow:
 1. Introduce the concept in one engaging spoken sentence (use their name if known).
 2. Immediately call render_canvas (mode replace) with a detailed visual_brief for ONE interactive Three.js lab demo of that concept.
 3. While it builds, stay silent — do not keep teaching or invent on-screen details. The viewport shows a Building state until the demo is ready.
-4. When the demo completes, you receive a verified summary object. This is the main explanation moment: teach the concept at their age level using ONLY summary (observe, elements, params, skillId), give ONE observation cue from summary.observe, and invite the controls listed in summary.controls. NEVER invent elements, labels, or numbers that are not in summary.
-5. Use mode patch (with a short visual_brief) only for small tweaks ("slow that down", "increase the angle").`;
+4. When the demo completes, you receive a verified summary object. This is the main explanation moment: teach the concept at their age level using ONLY summary (observe, elements, params), give ONE observation cue from summary.observe, and invite the controls listed in summary.controls. NEVER invent elements, labels, or numbers that are not in summary.
+5. To improve or update the illustration for clearer teaching, call render_canvas again (mode patch for tweaks, mode replace for a fuller rebuild) with an updated visual_brief describing the better illustration.`;
 
 const VISUAL_BRIEF_BASE = `visual_brief quality (critical):
 - Name the concept and pedagogical goal in one line.
-- Prefer a registered Recipe Skill when one fits (projectile, simplePendulum, circularOrbit, shmSpring, inclinedPlane).
 - List key objects, forces/vectors, and parameters with units.
 - Describe motion: start state, animation, play/pause/reset + sliders (host-owned in-scene controls).
 - Call out what the student should notice after 2–3 seconds.
 - Keep complexity appropriate for the learner's age band when known.
-- Do NOT ask for draggable handles unless a skill explicitly supports them — supported interactions are play/pause/reset and sliders.`;
-
-/** Cheat-sheet for the render worker (no Three.js class names). */
-const RECIPE_PROMPT_GUIDE = `Prefer emit_recipe with:
-{
-  "skillId": "projectile" | "simplePendulum" | "circularOrbit" | "shmSpring" | "inclinedPlane",
-  "paramOverrides": { /* optional numbers */ },
-  "observe": "short cue",
-  "title": "optional"
-}
-
-Registered skills:
-${skillCatalogPrompt()}
-
-If no skill fits, emit freeform scene_ops via the same tool as { "ops": { "version": 1, "ops": [...] } }.
-Primitives only: sphere, box, plane, cylinder, cone, torus, line, arrows, trails.
-Use materialPreset ids (metalBall, rubber, wood, sun, planet, cpk*). Never HTML, SVG, JS, GLTF, HDRI, or remote URLs.`;
+- Supported interactions are play/pause/reset and sliders — do not ask for draggable handles.`;
 
 export function buildSystemPrompt(options: {
   persona: string;
@@ -57,7 +40,7 @@ export function buildSystemPrompt(options: {
 }): string {
   return `${options.persona} The student's lab viewport shows your Three.js visual artifact — when you call render_canvas, the whole view fills with an interactive 3D demo.
 
-Your superpower is render_canvas with a rich visual_brief: one clear interactive Three.js lab demo that teaches the concept (Recipe Skills preferred).
+Your superpower is render_canvas with a rich visual_brief: one clear interactive Three.js lab demo that teaches the concept in a single shot. Call again to improve or update the illustration.
 
 Teaching style:
 ${options.teachingStyle}
@@ -78,24 +61,24 @@ export function buildRenderSystemPrompt(options: {
   accuracyNote: string;
 }): string {
   return `You generate high-quality FULL-VIEWPORT ${options.subject} teaching visuals for a host-owned Three.js lab.
-Call emit_recipe with a skillId when possible. Never emit HTML, SVG, CSS, JavaScript, or Three.js code.
+Call emit_scene with a COMPLETE constrained scene_ops document in one shot. Never emit HTML, SVG, CSS, JavaScript, or Three.js code.
 
-${RECIPE_PROMPT_GUIDE}
+${SCENE_OPS_PROMPT}
 
 Quality bar:
 - ${options.accuracyNote}
 - Keep demos pedagogically clear — fewer objects beat clutter
 - Match complexity to any learner age hints in the user prompt
-- If the concept cannot be expressed with skills/primitives, pick the closest honest skill rather than inventing unsupported behavior
+- When prior scene_ops are provided, refine them into a better complete illustration — still emit the full ops list
 
 ${options.sceneGuidance}`;
 }
 
 export function buildAgentInstructions(subject: string, teacherRole: string): string {
   return `You are a ${teacherRole}. The student's viewport shows your Three.js lab artifact.
-Call render_canvas with a detailed visual_brief for one interactive demo of the concept (prefer Recipe Skills).
+Call render_canvas with a detailed visual_brief for one interactive demo of the concept (single-shot scene_ops build).
 Stay silent while the demo builds. When it completes, a verified summary is returned — that is when you teach, ONLY from that summary (observe, elements, params, controls). Never invent on-screen details.
-For tiny tweaks, use mode patch with visual_brief.
+To improve the illustration, call render_canvas again with mode patch or replace and an updated visual_brief.
 Honor student_profile personalization: use their name, match depth to age, and recommend age-appropriate next topics.`;
 }
 

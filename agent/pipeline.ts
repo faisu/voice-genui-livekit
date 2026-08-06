@@ -10,7 +10,6 @@ import { createAgentLLM } from "./llm.js";
 import {
   getCanvasState,
   getDemoSummary,
-  getLastSkillId,
   getLearnerProfile,
 } from "./session.js";
 import {
@@ -107,7 +106,6 @@ class CanvasAgent extends voice.Agent {
             title: summary?.title ?? canvasState?.title,
             mode: canvasState?.mode,
             content_type: canvasState?.content_type ?? "scene_ops",
-            skillId: summary?.skillId ?? getLastSkillId(this.roomName),
             summary: summary
               ? {
                   observe: summary.observe,

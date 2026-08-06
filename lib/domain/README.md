@@ -1,6 +1,6 @@
 # Domain configurations
 
-A **domain** is a complete vertical preset: agent persona, render prompts, UI copy, and starter concept chips. The core Voice GenUI engine (LiveKit voice, async `render_canvas`, Three.js Recipe Skills via `SceneBuilder`) stays the same; only the domain config changes.
+A **domain** is a complete vertical preset: agent persona, render prompts, UI copy, and starter concept chips. The core Voice GenUI engine (LiveKit voice, async `render_canvas`, constrained `scene_ops` via `SceneBuilder`) stays the same; only the domain config changes.
 
 ## Built-in domains
 
@@ -71,9 +71,9 @@ Shared lesson flow, quiz guidance, and voice rules live in `shared.ts` — overr
 Student speaks
     → LiveKit voice agent (domain.agentInstructions + domain.systemPrompt)
     → render_canvas tool (domain.visualBriefDescription)
-    → canvasRenderWorker (domain.renderSystemPrompt → emit_recipe / skillId)
+    → canvasRenderWorker (domain.renderSystemPrompt → emit_scene full scene_ops)
     → scene_ops published to browser
-    → SceneBuilder (Three.js primitives + Recipe Skills)
+    → SceneBuilder (Three.js primitives + motion solvers)
 ```
 
 All domain-specific text is resolved at startup via `resolveDomain()` in `lib/domain/index.ts`.
